@@ -1,0 +1,10 @@
+data/
+results/
+log/
+plot/*.png
+.github/
+__pycache__/
+.vscode/    
+test.py
+test.sh
+overleaf
