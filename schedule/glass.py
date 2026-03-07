@@ -1,4 +1,4 @@
-"""GLaSS: Global Load-aware SNN Scheduler.
+"""GG (GLaSS-Greedy): Global Load-aware SNN Scheduler with ROI-Greedy strategy.
 
 Implementation based on algorithm.md specification:
 - Two-Tier Timing Architecture (physical ~1ms, scheduler ~500ms epoch)
@@ -9,6 +9,7 @@ Implementation based on algorithm.md specification:
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Dict, List, Optional
@@ -40,7 +41,7 @@ class TaskROI:
 
 class GLaSS(BaseScheduler):
     """
-    Global Load-aware SNN Scheduler (GLaSS).
+    GG (GLaSS-Greedy): Global Load-aware SNN Scheduler with ROI-Greedy strategy.
     
     A dynamic load balancing algorithm designed for neuromorphic computing clusters.
     
@@ -51,10 +52,11 @@ class GLaSS(BaseScheduler):
     - ROI-Greedy strategy: prioritize high-load but light-state tasks
     - Best-Fit target allocation to maximize fragmented resource usage
     
-    Load Definitions (from algorithm.md Section 2.B):
-    - L_i(t_phy) = α·SpikeCount + β·SynapticOps  (instantaneous task load)
-    - L_i(T_epoch) = Σ L_i(t_phy)  (accumulated task load over epoch)
-    - L_m^sched = L_raw(m, T_epoch) / C_capacity  (normalized card load)
+    Load Definitions:
+    - L_comp(i,t) = (N_active·tau_update + S_in·tau_synapse) / T_tick
+    - L_comm(i,t) = Σ(λ_k·FanOut_k·D_hops(k)) for tasks on card i
+    - L_node(i,t) = α·L_comp(i,t) + β·Sigmoid(L_comm(i,t))
+    - L_i(T_epoch) = Σ L_node(i,t) over physical ticks in one scheduler epoch
     
     Thresholds:
     - Θ_high = 0.85: Overload threshold (trigger migration out)
@@ -74,22 +76,30 @@ class GLaSS(BaseScheduler):
         beta: float = 0.01,
         card_capacity: float = 5000.0,
         gamma: float = 1.5,
+        tau_update: float = 1.0,
+        tau_synapse: float = 0.01,
+        tick_duration: float = 1.0,
         **kwargs,
     ):
         """
-        Initialize GLaSS scheduler.
+        Initialize GG (GLaSS-Greedy) scheduler.
         
         Args:
             cards: List of neuromorphic cards
-            alpha: Weight for spike count in load calculation (default 1.0)
-            beta: Weight for synaptic operations in load calculation (default 0.01)
+            alpha: Weight for L_comp in L_node calculation
+            beta: Weight for Sigmoid(L_comm) in L_node calculation
             card_capacity: Max capacity constant for normalization (C_capacity)
             gamma: Heat preference factor for ROI calculation (default 1.5)
+            tau_update: Processing time constant per active neuron
+            tau_synapse: Processing time constant per synaptic input
+            tick_duration: Physical time tick duration (T_tick)
         """
         super().__init__(cards, alpha, beta, **kwargs)
-        self.card_capacity = card_capacity
         self.gamma = gamma
-        
+        self.card_capacity = card_capacity
+        self.tau_update = tau_update
+        self.tau_synapse = tau_synapse
+        self.tick_duration = max(tick_duration, 1e-6)
         # Per-task accumulated load over current epoch: task_id -> L_i(T_epoch)
         self._task_epoch_load: Dict[int, float] = {}
         
@@ -98,29 +108,43 @@ class GLaSS(BaseScheduler):
             card.card_id: 0.0 for card in cards
         }
         
+        # Per-card accumulated communication load over current epoch
+        self._card_epoch_comm_load: Dict[int, float] = {
+            card.card_id: 0.0 for card in cards
+        }
+        
         logger.info(
-            "GLaSS Load bands | Θ_high=%.2f Θ_low=%.2f Θ_safe=%.2f capacity=%.0f",
+            "GG Load bands | Θ_high=%.2f Θ_low=%.2f Θ_safe=%.2f capacity=%.0f | alpha=%.3f beta=%.3f",
             self.THETA_HIGH,
             self.THETA_LOW,
             self.THETA_SAFE,
             self.card_capacity,
+            self.alpha,
+            self.beta,
         )
     
     @property
     def name(self) -> str:
-        return "GLaSS"
+        return "Glass"
     
     def get_epoch_loads(self) -> Dict[int, float]:
         """
         Get accumulated load for each card over the current epoch.
         
-        Overrides BaseScheduler to return GLaSS's accumulated epoch loads
+        Overrides BaseScheduler to return GG's accumulated epoch loads
         instead of instantaneous loads.
         
         Returns:
-            Dictionary mapping card_id to accumulated epoch load L_raw(m, T_epoch).
+            Dictionary mapping card_id to accumulated epoch load L_node(m, T_epoch).
         """
         return dict(self._card_epoch_load)
+
+    @staticmethod
+    def _sigmoid(value: float) -> float:
+        """Numerically stable congestion factor in [0, 1] with zero baseline."""
+        clipped = max(min(value, 60.0), -60.0)
+        # Shift sigmoid so L_comm=0 maps to 0 instead of 0.5.
+        return max(0.0, (2.0 / (1.0 + math.exp(-clipped))) - 1.0)
     
     def reset_epoch_loads(self) -> None:
         """
@@ -135,6 +159,8 @@ class GLaSS(BaseScheduler):
         self._task_epoch_load.clear()
         for card_id in self._card_epoch_load:
             self._card_epoch_load[card_id] = 0.0
+        for card_id in self._card_epoch_comm_load:
+            self._card_epoch_comm_load[card_id] = 0.0
     
     def _get_normalized_card_load(self, card: "Card") -> float:
         """
@@ -170,7 +196,7 @@ class GLaSS(BaseScheduler):
         Calculate ROI efficiency score for a task.
         
         Based on algorithm.md Section 3.2:
-        $$E_i = (L_i^epoch)^γ / (S_state + ε)$$s
+        E_i = (L_i^epoch)^γ / (S_state + ε)
         
         Higher γ (default 1.5) favors high-load tasks to avoid "ant moving" problem.
         """
@@ -195,40 +221,64 @@ class GLaSS(BaseScheduler):
         In two-tier timing architecture, this is called multiple times per scheduler
         step. We accumulate instantaneous loads to compute L_i(T_epoch).
         
-        From algorithm.md Section 2.B:
-        - L_i(t_phy) = α·SpikeCount + β·SynapticOps  (instantaneous)
-        - L_i(T_epoch) = Σ L_i(t_phy)  (accumulated over epoch)
+        Per physical tick, we compute card-level composite load:
+        - L_comp(i,t) = (N_active·tau_update + S_in·tau_synapse) / T_tick
+        - L_comm(i,t) = Σ(λ_k·FanOut_k·D_hops(k))
+        - L_node(i,t) = α·L_comp(i,t) + β·Sigmoid(L_comm(i,t))
         
         Args:
             scheduler_step: Current scheduler time step
         """
         for card in self.cards:
-            card_tick_load = 0.0
+            card_comp_load = 0.0
+            card_comm_load = 0.0
             
             for task in card.tasks:
-                # Calculate instantaneous task load: L_i(t_phy)
-                task_tick_load = (
-                    self.alpha * task.current_spike_count +
-                    self.beta * task.current_synaptic_ops
+                # L_comp task contribution uses active spikes and synaptic inputs.
+                task_comp_load = (
+                    task.current_spike_count * self.tau_update +
+                    task.current_synaptic_ops * self.tau_synapse
+                ) / self.tick_duration
+
+                # L_comm task contribution with weighted fan-out and hop distance.
+                firing_rate = task.current_spike_count / max(task.neuron_count, 1)
+                task_comm_load = firing_rate * task.fan_out * task.avg_hop_distance
+
+                # Task-level proxy for ROI sorting and migration delta estimates.
+                task_node_load = (
+                    self.alpha * task_comp_load +
+                    self.beta * self._sigmoid(task_comm_load)
                 )
                 
                 # Accumulate to task epoch load: L_i(T_epoch) += L_i(t_phy)
                 if task.task_id not in self._task_epoch_load:
                     self._task_epoch_load[task.task_id] = 0.0
-                self._task_epoch_load[task.task_id] += task_tick_load
+                self._task_epoch_load[task.task_id] += task_node_load
                 
-                card_tick_load += task_tick_load
+                card_comp_load += task_comp_load
+                card_comm_load += task_comm_load
+            
+            # Card-level composite load for this physical tick.
+            card_tick_load = (
+                self.alpha * card_comp_load +
+                self.beta * self._sigmoid(card_comm_load)
+            )
             
             # Accumulate to card epoch load: L_raw(m, T_epoch)
             if card.card_id not in self._card_epoch_load:
                 self._card_epoch_load[card.card_id] = 0.0
             self._card_epoch_load[card.card_id] += card_tick_load
             
+            # Accumulate communication load for this card
+            if card.card_id not in self._card_epoch_comm_load:
+                self._card_epoch_comm_load[card.card_id] = 0.0
+            self._card_epoch_comm_load[card.card_id] += card_comm_load
+            
     def select_card_for_task(self, task: "Task") -> Optional["Card"]:
         """
         Select the best card for placing a task.
         
-        GLaSS uses the placement strategy (default: Best-Fit).
+        GG uses the placement strategy (default: Best-Fit).
         Can be customized via __init__ placement_strategy parameter.
         """
         return super().select_card_for_task(task)
@@ -247,12 +297,30 @@ class GLaSS(BaseScheduler):
         """
         logger.info("--- Time Step %s Global Balancing ---", time_step)
         
-        # =================================================================
-        # Phase 1: Sense - Classify cards using accumulated epoch loads
-        # =================================================================
-        card_normalized_loads: Dict[int, float] = {}
-        card_states: Dict[int, CardState] = {}
+        # Phase 1: Sense - Classify cards and identify critical/available sets
+        card_normalized_loads, critical_cards, available_cards = self._sense_phase()
         
+        if not critical_cards:
+            logger.info(">> System is stable. No migration needed.")
+            return
+        
+        if not available_cards:
+            logger.info(">> System is saturated. No AVAILABLE cards for migration.")
+            return
+        
+        # Phase 2 & 3: Decision and Execution - Process each critical card
+        self._decision_execution_phase(
+            time_step, critical_cards, available_cards, card_normalized_loads
+        )
+    
+    def _sense_phase(self) -> tuple[Dict[int, float], List["Card"], List["Card"]]:
+        """
+        Phase 1: Sense - Classify cards using accumulated epoch loads.
+        
+        Returns:
+            Tuple of (card_normalized_loads, critical_cards, available_cards)
+        """
+        card_normalized_loads: Dict[int, float] = {}
         critical_cards: List["Card"] = []
         available_cards: List["Card"] = []
         
@@ -264,7 +332,6 @@ class GLaSS(BaseScheduler):
             
             # Classify card state
             state = self._classify_card(normalized_load)
-            card_states[card.card_id] = state
             
             logger.info(
                 "Card %s: EpochLoad = %.2f (Normalized = %.2f, State = %s, Tasks: %s)",
@@ -280,152 +347,226 @@ class GLaSS(BaseScheduler):
             elif state == CardState.AVAILABLE:
                 available_cards.append(card)
         
-        if not critical_cards:
-            logger.info(">> System is stable. No migration needed.")
-            return
+        return card_normalized_loads, critical_cards, available_cards
+    
+    def _decision_execution_phase(
+        self,
+        time_step: int,
+        critical_cards: List["Card"],
+        available_cards: List["Card"],
+        card_normalized_loads: Dict[int, float],
+    ) -> None:
+        """
+        Phase 2 & 3: Decision and Execution - ROI-Greedy task selection and migration.
         
-        if not available_cards:
-            logger.info(">> System is saturated. No AVAILABLE cards for migration.")
-            return
-        
-        assert available_cards, "There should be AVAILABLE cards for migration"
-        # =================================================================
-        # Phase 2: Decision - ROI-Greedy task selection
-        # =================================================================
+        Args:
+            time_step: Current simulation time step
+            critical_cards: Cards above THETA_HIGH threshold
+            available_cards: Cards below THETA_LOW threshold (mutable)
+            card_normalized_loads: Current normalized loads per card (mutable)
+        """
         for source_card in critical_cards:
-            # Exit early if no more AVAILABLE cards to accept migrations
             if not available_cards:
-                logger.info("   >>> out For: No more AVAILABLE cards; stopping migration.")
+                logger.info("   >>> No more AVAILABLE cards; stopping migration.")
                 break
             
             logger.info(">> Analyzing CRITICAL Card %s...", source_card.card_id)
             
-            source_load = card_normalized_loads[source_card.card_id]
-            
-            # Skip if only one active task
-            if len(source_card.tasks) == 1:
-                task = source_card.tasks[0]
-                # Only skip if the task is actually active (has positive spike count)
-                if task.current_spike_count > 0:
-                    logger.info("   Only one task present and it is active; skipping migration.")
-                    continue
-                else:
-                    logger.info("   Single task on card is inactive (spike_count=0); treating as idle.")
-            
-            # Calculate ROI for all tasks on this card
-            task_rois: List[TaskROI] = []
-            for task in source_card.tasks:
-                # Skip tasks that have finished (spike_count == 0)
-                # These are already completed or will be removed in next step
-                if task.current_spike_count == 0:
-                    logger.info("   Task %s is inactive (spike_count=0); skipping from migration pool.", task.task_id)
-                    continue
-                
-                roi = self._calculate_efficiency_score(task)
-                task_rois.append(roi)
-            
-            # Sort by efficiency score (highest first) - Greedy selection
-            task_rois.sort(key=lambda r: r.efficiency_score, reverse=True)
-            
-            # If no active tasks to migrate, skip this card
-            if not task_rois:
-                logger.info("   All tasks on this card are inactive; cannot perform migration.")
-                continue
-            
-            # Calculate migration target: reduce to Θ_safe
-            delta_target = source_load - self.THETA_SAFE
-            if delta_target <= 0:
-                logger.info("   Load already below Θ_safe; no migration needed.")
-                continue
-            
-            logger.info(
-                "   Migration target: reduce normalized load by %.3f (%.2f -> %.2f)",
-                delta_target,
-                source_load,
-                self.THETA_SAFE,
+            # Select tasks to migrate from this source card
+            tasks_to_migrate = self._select_tasks_for_migration(
+                source_card, card_normalized_loads
             )
             
-            # Knapsack-like selection: accumulate until target reached
-            accumulated_load = 0.0
-            tasks_to_migrate: List[TaskROI] = []
+            if not tasks_to_migrate:
+                continue
             
-            for roi in task_rois:
-                # Normalize task epoch load for comparison
-                normalized_task_load = roi.epoch_load / self.card_capacity
-                
+            # Execute migrations for selected tasks
+            self._execute_migrations(
+                time_step,
+                source_card,
+                tasks_to_migrate,
+                available_cards,
+                card_normalized_loads,
+            )
+    
+    def _select_tasks_for_migration(
+        self,
+        source_card: "Card",
+        card_normalized_loads: Dict[int, float],
+    ) -> List[TaskROI]:
+        """
+        Select tasks to migrate from a critical card using ROI-Greedy strategy.
+        
+        Args:
+            source_card: The overloaded card to migrate from
+            card_normalized_loads: Current normalized loads per card
+            
+        Returns:
+            List of TaskROI objects for tasks to migrate (sorted by efficiency)
+        """
+        source_load = card_normalized_loads[source_card.card_id]
+        
+        # Skip if only one active task
+        if len(source_card.tasks) == 1:
+            task = source_card.tasks[0]
+            if task.current_spike_count > 0:
+                logger.info("   Only one task present and it is active; skipping migration.")
+                return []
+            else:
+                logger.info("   Single task on card is inactive (spike_count=0); treating as idle.")
+        
+        # Calculate ROI for all active tasks on this card
+        task_rois: List[TaskROI] = []
+        for task in source_card.tasks:
+            if task.current_spike_count == 0:
                 logger.info(
-                    "   Candidate Task %s (Efficiency=%.2f, EpochLoad=%.1f, StateSize=%.1fMB, NormalizedLoad=%.3f)",
-                    roi.task.task_id,
-                    roi.efficiency_score,
-                    roi.epoch_load,
-                    roi.state_size_mb,
-                    normalized_task_load,
+                    "   Task %s is inactive (spike_count=0); skipping from migration pool.",
+                    task.task_id
                 )
-                
-                tasks_to_migrate.append(roi)
-                accumulated_load += normalized_task_load
-                
-                if accumulated_load >= delta_target:
-                    break
+                continue
             
-            # =================================================================
-            # Phase 3: Execution - Perform migrations with strategy allocation
-            # =================================================================
-            for roi in tasks_to_migrate:
-                task = roi.task
-                normalized_task_load = roi.epoch_load / self.card_capacity
-                
-                # Use placement strategy for migration target selection
-                target_card = self._placement_strategy.select_migration_target(
-                    task=task,
-                    candidate_cards=available_cards,
-                    task_load=normalized_task_load,
-                    card_loads=card_normalized_loads,
-                    load_threshold=self.THETA_HIGH,
+            roi = self._calculate_efficiency_score(task)
+            task_rois.append(roi)
+        
+        # Sort by efficiency score (highest first) - Greedy selection
+        task_rois.sort(key=lambda r: r.efficiency_score, reverse=True)
+        
+        if not task_rois:
+            logger.info("   All tasks on this card are inactive; cannot perform migration.")
+            return []
+        
+        # Calculate migration target: reduce to Θ_safe
+        delta_target = source_load - self.THETA_SAFE
+        if delta_target <= 0:
+            logger.info("   Load already below Θ_safe; no migration needed.")
+            return []
+        
+        logger.info(
+            "   Migration target: reduce normalized load by %.3f (%.2f -> %.2f)",
+            delta_target,
+            source_load,
+            self.THETA_SAFE,
+        )
+        
+        # Knapsack-like selection: accumulate until target reached
+        accumulated_load = 0.0
+        tasks_to_migrate: List[TaskROI] = []
+        
+        for roi in task_rois:
+            normalized_task_load = roi.epoch_load / self.card_capacity
+            
+            logger.info(
+                "   Candidate Task %s (Efficiency=%.2f, EpochLoad=%.1f, StateSize=%.1fMB, NormalizedLoad=%.3f)",
+                roi.task.task_id,
+                roi.efficiency_score,
+                roi.epoch_load,
+                roi.state_size_mb,
+                normalized_task_load,
+            )
+            
+            tasks_to_migrate.append(roi)
+            accumulated_load += normalized_task_load
+            
+            if accumulated_load >= delta_target:
+                break
+        
+        return tasks_to_migrate
+    
+    def _execute_migrations(
+        self,
+        time_step: int,
+        source_card: "Card",
+        tasks_to_migrate: List[TaskROI],
+        available_cards: List["Card"],
+        card_normalized_loads: Dict[int, float],
+    ) -> None:
+        """
+        Execute migrations for selected tasks.
+        
+        Args:
+            time_step: Current simulation time step
+            source_card: Source card to migrate from
+            tasks_to_migrate: List of TaskROI objects to migrate
+            available_cards: List of available target cards (mutable)
+            card_normalized_loads: Current normalized loads per card (mutable)
+        """
+        for roi in tasks_to_migrate:
+            task = roi.task
+            normalized_task_load = roi.epoch_load / self.card_capacity
+            
+            # Use placement strategy for migration target selection
+            target_card = self._placement_strategy.select_migration_target(
+                task=task,
+                candidate_cards=available_cards,
+                task_load=normalized_task_load,
+                card_loads=card_normalized_loads,
+                load_threshold=self.THETA_HIGH,
+            )
+            
+            if target_card is None:
+                logger.info(
+                    "   >>> [MIGRATION] No suitable target for Task %s; skip",
+                    task.task_id,
+                )
+                continue
+            
+            # Execute migration with resource constraint check
+            success = self._execute_migration(task, source_card, target_card, time_step)
+            
+            if success:
+                self._update_load_tracking_after_migration(
+                    task, source_card, target_card, normalized_task_load,
+                    card_normalized_loads,
                 )
                 
-                if target_card is None:
-                    logger.info(
-                        "   >>> [MIGRATION] No suitable target for Task %s; skip",
-                        task.task_id,
-                    )
-                    continue
-                
-                # Execute migration with resource constraint check
-                success = self._execute_migration(task, source_card, target_card, time_step)
-                
-                if success:
-                    # Update epoch load tracking to reflect migration
-                    task_epoch_load = self._task_epoch_load.get(task.task_id, 0.0)
-                    self._card_epoch_load[source_card.card_id] -= task_epoch_load
-                    self._card_epoch_load[target_card.card_id] += task_epoch_load
-                    
-                    # Update normalized load estimates
-                    card_normalized_loads[source_card.card_id] -= normalized_task_load
-                    card_normalized_loads[target_card.card_id] += normalized_task_load
-                    
-                    logger.info(
-                        "   >>> [MIGRATION] Target Card %s, Normalized Load rise to: %.3f",
-                        target_card.card_id,
-                        card_normalized_loads[target_card.card_id],
-                    )
-                    logger.info(
-                        "   >>> [MIGRATION] Source Card %s, Normalized Load drop to: %.3f",
-                        source_card.card_id,
-                        card_normalized_loads[source_card.card_id],
-                    )
-                    
-                    
-                    # Re-classify target card; remove if no longer AVAILABLE
-                    new_target_state = self._classify_card(card_normalized_loads[target_card.card_id])
-                    if new_target_state != CardState.AVAILABLE:
-                        available_cards.remove(target_card)
+                # Re-classify target card; remove if no longer AVAILABLE
+                new_target_state = self._classify_card(
+                    card_normalized_loads[target_card.card_id]
+                )
+                if new_target_state != CardState.AVAILABLE:
+                    available_cards.remove(target_card)
 
-                    if not available_cards:
-                        logger.info("   >>> inner For: No more AVAILABLE cards; stopping migration.")
-                        break
-        # Note: epoch loads are NOT reset here.
-        # Engine will call reset_epoch_loads() after recording metrics.
+                if not available_cards:
+                    logger.info("   >>> No more AVAILABLE cards; stopping migration.")
+                    break
+    
+    def _update_load_tracking_after_migration(
+        self,
+        task: "Task",
+        source_card: "Card",
+        target_card: "Card",
+        normalized_task_load: float,
+        card_normalized_loads: Dict[int, float],
+    ) -> None:
+        """
+        Update internal load tracking after a successful migration.
+        
+        Args:
+            task: The migrated task
+            source_card: Card the task migrated from
+            target_card: Card the task migrated to
+            normalized_task_load: Normalized load of the migrated task
+            card_normalized_loads: Current normalized loads per card (mutable)
+        """
+        # Update epoch load tracking to reflect migration
+        task_epoch_load = self._task_epoch_load.get(task.task_id, 0.0)
+        self._card_epoch_load[source_card.card_id] -= task_epoch_load
+        self._card_epoch_load[target_card.card_id] += task_epoch_load
+        
+        # Update normalized load estimates
+        card_normalized_loads[source_card.card_id] -= normalized_task_load
+        card_normalized_loads[target_card.card_id] += normalized_task_load
+        
+        logger.info(
+            "   >>> [MIGRATION] Target Card %s, Normalized Load rise to: %.3f",
+            target_card.card_id,
+            card_normalized_loads[target_card.card_id],
+        )
+        logger.info(
+            "   >>> [MIGRATION] Source Card %s, Normalized Load drop to: %.3f",
+            source_card.card_id,
+            card_normalized_loads[source_card.card_id],
+        )
 
 
 # Register GLaSS in the scheduler registry

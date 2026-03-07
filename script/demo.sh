@@ -50,6 +50,20 @@ echo "命令: make glass+rr"
 echo ""
 CARDS=2 TASKS=10 STEPS=5 make glass+rr 2>&1 | grep -E "^(2026|Scheduler:|Tasks|Total Migrations)" | tail -5
 
+# 测试 5: GLaSS-DRL（深度强化学习调度器）
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📊 演示 5: GLaSS-DRL（深度强化学习调度器）"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "命令: make glass-drl"
+echo ""
+if [ -f "models/glass_drl.zip" ]; then
+    CARDS=2 TASKS=10 STEPS=5 make glass-drl 2>&1 | grep -E "^(2026|Scheduler:|Tasks|Total Migrations)" | tail -5
+else
+    echo "⚠️  模型文件 models/glass_drl.zip 不存在，跳过 GLaSS-DRL 演示"
+    echo "   请先运行: bash script/train_drl.sh"
+fi
+
 # 总结
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -64,6 +78,7 @@ echo ""
 echo "🚀 快速开始命令："
 echo "   make glass+bestfit          # GLaSS + Best-Fit（默认策略）"
 echo "   make glass+p2c              # GLaSS + P2C 策略"
+echo "   make glass-drl              # GLaSS-DRL（深度强化学习）"
 echo "   CARDS=8 TASKS=200 make glass+p2c   # 8卡 200任务 P2C策略"
 echo "   make glass drf              # 分别运行 GLaSS 和 DRF"
 echo "   python main.py --scheduler glass --placement-strategy drf  # 直接 Python"

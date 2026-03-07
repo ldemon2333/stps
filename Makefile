@@ -1,29 +1,30 @@
 PYTHON ?= python
-CARDS ?= 16
-TASKS ?= 1024
-STEPS ?= 256
+CARDS ?= 4
+TASKS ?= 512
+STEPS ?= 512
 SEED ?= 21
 LOG_DIR ?= log
 DATA_DIR ?= data
-ARRIVAL_MODE ?= poisson
+ARRIVAL_MODE ?= bursty
 DATA_OUTPUT ?=
-# GLaSS specific parameters
-CARD_CAPACITY ?= 4000
+# GG (GLaSS-Greedy) specific parameters
+CARD_CAPACITY ?= 4500
 
 # Common arguments for all simulations
 COMMON_ARGS = --cards $(CARDS) --tasks $(TASKS) --steps $(STEPS) --seed $(SEED) \
-              --log-dir $(LOG_DIR) --data-dir $(DATA_DIR) --arrival-mode $(ARRIVAL_MODE)
+              --log-dir $(LOG_DIR) --data-dir $(DATA_DIR) --arrival-mode $(ARRIVAL_MODE) --card-capacity $(CARD_CAPACITY)
 
 # If DATA_OUTPUT is set, append to common args
 ifneq ($(strip $(DATA_OUTPUT)),)
 	COMMON_ARGS := $(COMMON_ARGS) --data-output $(DATA_OUTPUT)
 endif
 
-# GLaSS specific arguments
-GLASS_ARGS = --card-capacity $(CARD_CAPACITY)
+# GG (GLaSS-Greedy) specific arguments
+
 
 .PHONY: all glass gandiva p2c drf bestfit rr list-schedulers clean help plot_step_load plot_spike compare \
-        glass+bestfit glass+p2c glass+drf glass+rr
+        glass+bestfit glass+p2c glass+drf glass+rr \
+        train-drl eval-drl compare-drl
 
 # Define scheduler and strategy names
 SCHEDULERS := glass gandiva drf p2c bestfit rr
@@ -56,20 +57,20 @@ else
 	$(PYTHON) main.py --scheduler bestfit $(COMMON_ARGS)
 endif
 
-# Run simulation with GLaSS dynamic scheduler (default: Best-Fit strategy)
+# Run simulation with GG (GLaSS-Greedy) dynamic scheduler (default: Best-Fit strategy)
 glass:
 ifeq ($(OVERRIDE_SCHEDULERS),1)
 	@true
 else
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) $(GLASS_ARGS)
+	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) 
 endif
 
-# Run Gandiva-Spike dynamic scheduler (Smallest-First baseline)
+# Run GLaSS dynamic scheduler (main algorithm)
 gandiva:
 ifeq ($(OVERRIDE_SCHEDULERS),1)
 	@true
 else
-	$(PYTHON) main.py --scheduler gandiva $(COMMON_ARGS) $(GLASS_ARGS)
+	$(PYTHON) main.py --scheduler gandiva $(COMMON_ARGS) 
 endif
 
 # Run drf scheduler
@@ -88,27 +89,35 @@ else
 	$(PYTHON) main.py --scheduler p2c $(COMMON_ARGS)
 endif
 
-# GLaSS with specific placement strategies (glass+strategy format)
-# These targets allow using a strategy with GLaSS without running it as a separate scheduler
+# Run glass-drl scheduler
+glass-drl:
+ifeq ($(OVERRIDE_SCHEDULERS),1)
+	@true
+else
+	$(PYTHON) main.py --scheduler glass_drl --model-path $(MODEL_PATH) --delta $(DELTA) --top-k $(TOP_K) --window-size $(WINDOW_SIZE) $(COMMON_ARGS)
+endif
 
-# GLaSS + Best-Fit Strategy
+# GG with specific placement strategies (glass+strategy format)
+# These targets allow using a strategy with GG without running it as a separate scheduler
+
+# GG + Best-Fit Strategy
 glass+bestfit:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) $(GLASS_ARGS) --placement-strategy bestfit
+	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy bestfit
 
-# GLaSS + P2C Strategy
+# GG + P2C Strategy
 glass+p2c:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) $(GLASS_ARGS) --placement-strategy p2c
+	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy p2c
 
-# GLaSS + DRF Strategy
+# GG + DRF Strategy
 glass+drf:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) $(GLASS_ARGS) --placement-strategy drf
+	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy drf
 
-# GLaSS + Round-Robin Strategy
+# GG + Round-Robin Strategy
 glass+rr:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) $(GLASS_ARGS) --placement-strategy rr
+	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy rr
 
 # Run all schedulers for comparison
-compare: glass gandiva drf p2c bestfit rr
+compare: glass-drl glass gandiva drf p2c bestfit rr
 
 # List available schedulers
 list-schedulers:
@@ -194,5 +203,23 @@ clean:
 	rm -f $(LOG_DIR)/*.log 
 	rm -f $(DATA_DIR)/*.csv
 	rm -f plot/*.pdf
-	find plot -name '*.png' -not -name 'metrics*.png'  -delete
-	rm -f results/*.txt
+	rm -f figures/*
+	find plot -name '*.png' -not -name 'metrics*.png' -not -name 'throughput_metrics*.png' -delete
+	rm -f results/*.csv
+
+# GLaSS-DRL targets
+MODEL_PATH ?= models/glass_drl.zip
+DRL_TIMESTEPS ?= 200000
+DELTA ?= 0.1
+TOP_K ?= 10
+WINDOW_SIZE ?= 16
+
+train-drl:
+	bash script/train_drl.sh
+
+eval-drl:
+	bash script/eval_drl.sh
+
+compare-drl: gandiva glass bestfit drf p2c
+	$(PYTHON) main.py --scheduler glass_drl $(COMMON_ARGS) --model-path $(MODEL_PATH) --delta $(DELTA) --top-k $(TOP_K) --window-size $(WINDOW_SIZE)
+	$(PYTHON) plot/plot_drl_comparison.py --data-dir $(DATA_DIR)

@@ -24,6 +24,7 @@ from . import gandiva     # noqa: F401
 from . import drf         # noqa: F401
 from . import p2c         # noqa: F401
 from . import roundrobin  # noqa: F401
+from . import glass_drl   # noqa: F401
 
 
 

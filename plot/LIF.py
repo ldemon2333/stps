@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # High-contrast palette
-COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00"]
+COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00", "#e74c3c"]
 plt.rcParams["font.family"] = ["DejaVu Sans", "DejaVu Serif", "sans-serif"]
 
 
@@ -117,11 +117,27 @@ def compute_lif(per_step_loads: Dict[int, List[float]]) -> Dict[int, float]:
 
 
 def infer_label(csv_path: Path) -> str:
-    """Infer a label from the CSV filename."""
-    # Use filename prefix up to first underscore as the label
-    stem = csv_path.stem
-    prefix = stem.split("_")[0]
-    return prefix
+    """Infer a readable label from the CSV filename."""
+    stem = csv_path.stem.lower()
+    parts = stem.split("_")
+    # Handle two-part prefixes like glass_drl
+    if len(parts) >= 2 and parts[0] == "glass" and parts[1] == "drl":
+        scheduler = "glass_drl"
+    else:
+        scheduler = parts[0]
+    scheduler_names = {
+        "glass": "Glass",
+        "gandiva": "Gandiva",
+        "gandivaspike": "Gandiva",
+        "glass_drl": "Glass-DRL",
+        "bestfit": "BestFit",
+        "drf": "DRF",
+        "p2c": "P2C",
+        "roundrobin": "RoundRobin",
+        "rr": "RoundRobin",
+        "static": "Static",
+    }
+    return scheduler_names.get(scheduler, scheduler.upper())
 
 
 def plot_lif_comparison(
@@ -151,8 +167,8 @@ def plot_lif_comparison(
     
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Plot GLaSS and best other scheduler
-    colors = ["#0b3c5d", "#b22222"]  # Dark blue for GLaSS, crimson for best other
+    # Plot Gandiva and best other scheduler
+    colors = ["#0b3c5d", "#b22222"]  # Dark blue for Gandiva, crimson for best other
     line_styles = ["-", "--"]
     markers = ["o", "s"]
     
@@ -232,8 +248,8 @@ def main() -> None:
         print("No valid data to plot.")
         return
     
-    # Find GLaSS data and compute average LIF for all schedulers
-    glass_data = None
+    # Find Gandiva data and compute average LIF for all schedulers
+    gandiva_data = None
     scheduler_avgs = {}  # Map: label -> avg LIF
     
     for label, lif_dict in data_list:
@@ -241,16 +257,16 @@ def main() -> None:
         avg_lif = np.mean(lif_values) if lif_values else 0
         scheduler_avgs[label] = avg_lif
         
-        # Accept 'glass' prefix as GLaSS identifier (labels come from filename prefixes)
-        if label.lower().startswith("glass") or label == "GLaSS":
-            glass_data = (label, lif_dict)
+        # Accept 'gandivaspike' prefix as Gandiva identifier (labels come from filename prefixes)
+        if label.lower().startswith("gandivaspike") or label.lower() == "gandiva":
+            gandiva_data = (label, lif_dict)
     
-    if glass_data is None:
-        print("Error: GLaSS data not found in input.")
+    if gandiva_data is None:
+        print("Error: Gandiva data not found in input.")
         return
     
-    # Find best non-GLaSS scheduler (lowest LIF is best)
-    other_schedulers = {k: v for k, v in scheduler_avgs.items() if not k.lower().startswith("glass") and k != "GLaSS"}
+    # Find best non-Gandiva scheduler (lowest LIF is best)
+    other_schedulers = {k: v for k, v in scheduler_avgs.items() if not k.lower().startswith("gandivaspike") and k.lower() != "gandiva"}
     best_label = min(other_schedulers.items(), key=lambda x: x[1])[0]
     best_data = next((label, lif_dict) for label, lif_dict in data_list if label == best_label)
     
@@ -262,7 +278,7 @@ def main() -> None:
     else:
         output = args.output
     
-    plot_path = plot_lif_comparison([glass_data, best_data], output, scheduler_avgs)
+    plot_path = plot_lif_comparison([gandiva_data, best_data], output, scheduler_avgs)
     print(f"Saved LIF comparison plot to {plot_path}")
 
 

@@ -9,11 +9,43 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+import numpy as np
+
 if TYPE_CHECKING:
     from schedule.base import SchedulerMetrics
     from util.card import Card
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TaskDelay:
+    """Record of a single task's timing information."""
+    task_id: int
+    arrival_step: int
+    placement_step: int
+    completion_step: int
+    
+    @property
+    def queue_delay(self) -> int:
+        """Time waiting in queue before placement (arrival to placement)."""
+        if self.placement_step < 0:
+            return -1  # Never placed
+        return self.placement_step - self.arrival_step
+    
+    @property
+    def execution_delay(self) -> int:
+        """Time from placement to completion."""
+        if self.completion_step < 0 or self.placement_step < 0:
+            return -1
+        return self.completion_step - self.placement_step
+    
+    @property
+    def total_delay(self) -> int:
+        """Total time from arrival to completion."""
+        if self.completion_step < 0:
+            return -1
+        return self.completion_step - self.arrival_step
 
 
 @dataclass
@@ -58,6 +90,7 @@ class SimulationMetrics:
     - Load snapshots over time
     - Task statistics (completed, pending)
     - Scheduler-specific metrics (migrations)
+    - SLA violations and latency metrics
     """
     scheduler_name: str
     arrival_mode: str
@@ -65,6 +98,7 @@ class SimulationMetrics:
     task_count: int
     steps: int
     seed: Optional[int]
+    card_capacity: float = 4000.0  # Load threshold for SLA violation
     
     # Time series data
     load_snapshots: List[LoadSnapshot] = field(default_factory=list)
@@ -73,9 +107,45 @@ class SimulationMetrics:
     tasks_completed: int = 0
     tasks_pending_at_end: int = 0
     
+    # Task delay tracking
+    task_delays: List[TaskDelay] = field(default_factory=list)
+    
+    # SLA violation tracking: total count of (card, time_step) pairs exceeding capacity
+    sla_violation_count: int = 0
+    # Per-step SLA violations for visualization
+    sla_violations_per_step: List[int] = field(default_factory=list)
+    
     # Timing
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    
+    def record_task_delay(self, task_id: int, arrival_step: int, 
+                          placement_step: int, completion_step: int) -> None:
+        """Record timing information for a completed task."""
+        delay = TaskDelay(
+            task_id=task_id,
+            arrival_step=arrival_step,
+            placement_step=placement_step,
+            completion_step=completion_step,
+        )
+        self.task_delays.append(delay)
+    
+    def check_sla_violation(self, time_step: int, snapshot: LoadSnapshot) -> int:
+        """
+        Check how many cards exceed capacity at this time step.
+        
+        SLA violation is defined per (card, time_step) pair:
+        f(L_{n,t}) = 1 if L_{n,t} > capacity, else 0
+        
+        Returns:
+            Number of cards that violated SLA at this time step
+        """
+        violations = sum(1 for load in snapshot.card_loads.values() 
+                        if load > self.card_capacity)
+        logger.debug("Time step %d: %d SLA violations, card_capacity=%.2f", time_step, violations, self.card_capacity)
+        self.sla_violation_count += violations
+        self.sla_violations_per_step.append(violations)
+        return violations
     
     def record_load_snapshot(
         self,
@@ -142,6 +212,71 @@ class SimulationMetrics:
             return 0.0
         return self.tasks_completed / self.task_count
     
+    @property
+    def sla_violation_rate(self) -> float:
+        """
+        SLA Violation Rate = sum(f(L_{n,t})) / (N × T)
+        
+        Where f(L_{n,t}) = 1 if card n's load at time t exceeds capacity.
+        Returns a value between 0.0 and 1.0.
+        """
+        total_steps = len(self.load_snapshots)
+        if total_steps == 0 or self.card_count == 0:
+            return 0.0
+        # Total possible violations = N cards × T time steps
+        total_pairs = self.card_count * total_steps
+        return self.sla_violation_count / total_pairs
+    
+    @property
+    def p99_delay(self) -> float:
+        """99th percentile of task completion delays (arrival to completion)."""
+        if not self.task_delays:
+            return 0.0
+        delays = [d.total_delay for d in self.task_delays if d.total_delay >= 0]
+        if not delays:
+            return 0.0
+        return float(np.percentile(delays, 99))
+    
+    @property
+    def p95_delay(self) -> float:
+        """95th percentile of task completion delays."""
+        if not self.task_delays:
+            return 0.0
+        delays = [d.total_delay for d in self.task_delays if d.total_delay >= 0]
+        if not delays:
+            return 0.0
+        return float(np.percentile(delays, 95))
+    
+    @property
+    def p50_delay(self) -> float:
+        """Median task completion delay."""
+        if not self.task_delays:
+            return 0.0
+        delays = [d.total_delay for d in self.task_delays if d.total_delay >= 0]
+        if not delays:
+            return 0.0
+        return float(np.percentile(delays, 50))
+    
+    @property
+    def avg_delay(self) -> float:
+        """Average task completion delay."""
+        if not self.task_delays:
+            return 0.0
+        delays = [d.total_delay for d in self.task_delays if d.total_delay >= 0]
+        if not delays:
+            return 0.0
+        return float(np.mean(delays))
+    
+    @property
+    def max_delay(self) -> float:
+        """Maximum task completion delay."""
+        if not self.task_delays:
+            return 0.0
+        delays = [d.total_delay for d in self.task_delays if d.total_delay >= 0]
+        if not delays:
+            return 0.0
+        return float(max(delays))
+    
     def to_summary_dict(self, scheduler_metrics: Optional["SchedulerMetrics"] = None) -> dict:
         """
         Convert metrics to a summary dictionary.
@@ -165,6 +300,14 @@ class SimulationMetrics:
             "throughput": round(self.throughput, 4),
             "avg_load_imbalance": round(self.avg_load_imbalance, 2),
             "max_load_imbalance": round(self.max_load_imbalance, 2),
+            # SLA and latency metrics
+            "sla_violation_rate": round(self.sla_violation_rate, 4),
+            "sla_violation_count": self.sla_violation_count,
+            "p99_delay": round(self.p99_delay, 2),
+            "p95_delay": round(self.p95_delay, 2),
+            "p50_delay": round(self.p50_delay, 2),
+            "avg_delay": round(self.avg_delay, 2),
+            "max_delay": round(self.max_delay, 2),
         }
         
         if scheduler_metrics:
@@ -278,6 +421,17 @@ class MetricsWriter:
         logger.info("Avg Load Imbalance (Variance): %.2f", summary["avg_load_imbalance"])
         logger.info("Max Load Imbalance (Variance): %.2f", summary["max_load_imbalance"])
         
+        # SLA and Latency metrics
+        logger.info("-" * 60)
+        logger.info("SLA Violation Rate: %.4f (%.2f%%)", 
+                   summary["sla_violation_rate"],
+                   summary["sla_violation_rate"] * 100)
+        logger.info("Avg Delay: %.2f steps", summary["avg_delay"])
+        logger.info("P50 Delay: %.2f steps", summary["p50_delay"])
+        logger.info("P95 Delay: %.2f steps", summary["p95_delay"])
+        logger.info("P99 Delay: %.2f steps", summary["p99_delay"])
+        logger.info("Max Delay: %.2f steps", summary["max_delay"])
+        
         if "total_migrations" in summary:
             logger.info("-" * 60)
             logger.info("Total Migrations: %d", summary["total_migrations"])
@@ -334,6 +488,12 @@ class MetricsWriter:
                 "throughput",
                 "avg_load_imbalance",
                 "max_load_imbalance",
+                "sla_violation_rate",
+                "avg_delay",
+                "p50_delay",
+                "p95_delay",
+                "p99_delay",
+                "max_delay",
                 "total_migrations",
                 "total_migration_cost",
                 "migrations_per_task",
@@ -350,6 +510,12 @@ class MetricsWriter:
                 summary["throughput"],
                 summary["avg_load_imbalance"],
                 summary["max_load_imbalance"],
+                summary["sla_violation_rate"],
+                summary["avg_delay"],
+                summary["p50_delay"],
+                summary["p95_delay"],
+                summary["p99_delay"],
+                summary["max_delay"],
                 summary.get("total_migrations", 0),
                 summary.get("total_migration_cost", 0.0),
                 round(migrations_per_task, 4),

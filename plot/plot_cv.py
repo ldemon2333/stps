@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # High-contrast palette
-COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00"]
+COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00", "#e74c3c"]
 plt.rcParams["font.family"] = ["DejaVu Sans", "DejaVu Serif", "sans-serif"]
 
 
@@ -105,10 +105,26 @@ def compute_cv(per_step_loads: Dict[int, List[float]]) -> Dict[int, float]:
 
 def infer_label(csv_path: Path) -> str:
     """Infer a label from the CSV filename."""
-    # Use filename prefix up to first underscore as the label
-    stem = csv_path.stem
-    prefix = stem.split("_")[0]
-    return prefix
+    stem = csv_path.stem.lower()
+    parts = stem.split("_")
+    # Handle two-part prefixes like glass_drl
+    if len(parts) >= 2 and parts[0] == "glass" and parts[1] == "drl":
+        scheduler = "glass_drl"
+    else:
+        scheduler = parts[0]
+    scheduler_names = {
+        "glass": "Glass",
+        "gandiva": "Gandiva",
+        "gandivaspike": "Gandiva",
+        "glass_drl": "Glass-DRL",
+        "bestfit": "BestFit",
+        "drf": "DRF",
+        "p2c": "P2C",
+        "roundrobin": "RoundRobin",
+        "rr": "RoundRobin",
+        "static": "Static",
+    }
+    return scheduler_names.get(scheduler, scheduler.upper())
 
 
 def plot_cv_comparison(
@@ -128,8 +144,8 @@ def plot_cv_comparison(
     output.parent.mkdir(parents=True, exist_ok=True)
     output = output.with_suffix(".png")
     
-    # Find GLaSS data and compute average CV for all schedulers
-    glass_data = None
+    # Find Gandiva data and compute average CV for all schedulers
+    gandiva_data = None
     scheduler_avgs = {}  # Map: label -> avg CV
     
     for label, cv_dict in data_list:
@@ -137,30 +153,30 @@ def plot_cv_comparison(
         avg_cv = np.mean(cv_values) if cv_values else 0
         scheduler_avgs[label] = avg_cv
         
-        # Accept 'glass' prefix as GLaSS identifier (labels come from filename prefixes)
-        if label.lower().startswith("glass") or label == "GLaSS":
-            glass_data = (label, cv_dict)
+        # Accept 'gandivaspike' prefix as Gandiva identifier (labels come from filename prefixes)
+        if label.lower().startswith("gandivaspike") or label.lower() == "gandiva":
+            gandiva_data = (label, cv_dict)
     
-    if glass_data is None:
-        print("Error: GLaSS data not found in input.")
+    if gandiva_data is None:
+        print("Error: Gandiva data not found in input.")
         return output
     
-    # Find best non-GLaSS scheduler (lowest CV is best)
-    other_schedulers = {k: v for k, v in scheduler_avgs.items() if k != "GLaSS"}
+    # Find best non-Gandiva scheduler (lowest CV is best)
+    other_schedulers = {k: v for k, v in scheduler_avgs.items() if k.lower() != "gandiva" and not k.lower().startswith("gandivaspike")}
     best_label = min(other_schedulers.items(), key=lambda x: x[1])[0]
     best_data = next((label, cv_dict) for label, cv_dict in data_list if label == best_label)
     
     # Collect time steps
     all_steps = set()
-    all_steps.update(glass_data[1].keys())
+    all_steps.update(gandiva_data[1].keys())
     all_steps.update(best_data[1].keys())
     sorted_steps = sorted(all_steps)
     
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Plot GLaSS and best other scheduler
-    comparison_data = [glass_data, best_data]
-    colors = ["#0b3c5d", "#b22222"]  # Dark blue for GLaSS, crimson for best other
+    # Plot Gandiva and best other scheduler
+    comparison_data = [gandiva_data, best_data]
+    colors = ["#0b3c5d", "#b22222"]  # Dark blue for Gandiva, crimson for best other
     line_styles = ["-", "--"]
     markers = ["o", "s"]
     

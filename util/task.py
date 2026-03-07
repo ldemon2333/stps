@@ -1,6 +1,7 @@
 import math
 import random
 from dataclasses import dataclass, field
+from typing import List
 
 
 @dataclass
@@ -24,6 +25,15 @@ class Task:
     hotspot_width: int = field(init=False)
     base_phase: float = field(init=False)
     noise_scale: float = field(init=False)
+    
+    # Timing for latency tracking
+    placement_step: int = -1  # When task was first placed on a card
+    completion_step: int = -1  # When task completed
+
+    # Communication-related fields for GLaSS-DRL
+    fan_out: int = field(init=False)           # Synaptic fan-out count
+    avg_hop_distance: float = 1.0              # Average hop distance (updated at placement)
+    firing_rate_history: List[float] = field(default_factory=list)  # Sliding window of firing rates
 
     def __post_init__(self) -> None:
         # Estimate resource needs from neuron count and complexity to align with card constraints.
@@ -40,6 +50,9 @@ class Task:
         self.hotspot_width = max(1, self.hotspot_period // 4)
         self.base_phase = random.uniform(0, 2 * math.pi)
         self.noise_scale = random.uniform(0.05, 0.2)
+
+        # Derive fan_out from synaptic connectivity
+        self.fan_out = max(1, self.synapses_required // max(self.neuron_count, 1))
 
     def simulate_tick(self) -> None:
         """Simulate temporally correlated SNN spikes with hotspot bursts and noise."""
@@ -63,3 +76,7 @@ class Task:
         scale = self.complexity_ratio * (self.cores_required / 50)
         self.current_spike_count = int(base_spikes * scale)
         self.current_synaptic_ops = int(base_ops * scale)
+
+        # Track firing rate history for temporal state (GLaSS-DRL)
+        firing_rate = self.current_spike_count / max(self.neuron_count, 1)
+        self.firing_rate_history.append(firing_rate)

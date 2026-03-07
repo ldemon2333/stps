@@ -10,10 +10,16 @@ TASKS=100
 STEPS=60
 SEED=42
 
-# 4 种调度算法
-SCHEDULERS=("bestfit" "drf" "p2c" "glass")
+# 5 种调度算法（含 Glass-DRL）
+SCHEDULERS=("bestfit" "drf" "p2c" "glass" "glass_drl")
 # 3 种到达模式
 ARRIVALS=("poisson" "bursty" "mixed")
+
+# GLaSS-DRL parameters
+MODEL_PATH="models/glass_drl.zip"
+DELTA=1.0
+TOP_K=10
+WINDOW_SIZE=16
 
 echo "=========================================================="
 echo "    GLaSS Experiment: Multi-Scheduler Comparison"
@@ -53,6 +59,11 @@ for sched in "${SCHEDULERS[@]}"; do
     echo ">>> [$run_count/$total_runs] scheduler=$sched arrival=$arrival"
     
     # 运行仿真
+    DRL_ARGS=""
+    if [ "$sched" = "glass_drl" ]; then
+        DRL_ARGS="--model-path $MODEL_PATH --delta $DELTA --top-k $TOP_K --window-size $WINDOW_SIZE"
+    fi
+    
     python main.py --scheduler "$sched" \
                    --cards $CARDS \
                    --tasks $TASKS \
@@ -60,7 +71,8 @@ for sched in "${SCHEDULERS[@]}"; do
                    --seed $SEED \
                    --arrival-mode "$arrival" \
                    --data-dir data \
-                   --log-dir log
+                   --log-dir log \
+                   $DRL_ARGS
     
     echo "    ✓ Completed: data/${sched}_${arrival}_loads_*.csv"
     echo ""

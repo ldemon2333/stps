@@ -30,13 +30,15 @@ DRF_FILE=$(find_latest_csv "drf")
 P2C_FILE=$(find_latest_csv "p2c")
 BESTFIT_FILE=$(find_latest_csv "bestfit")
 RR_FILE=$(find_latest_csv "roundrobin")
+GLASS_DRL_FILE=$(find_latest_csv "glass_drl" 2>/dev/null || true)
 
 echo "Found data files:"
-echo "  GLaSS:     $GLASS_FILE"
-echo "  DRF:       $DRF_FILE"
-echo "  P2C:       $P2C_FILE"
-echo "  BestFit:   $BESTFIT_FILE"
+echo "  GLaSS:      $GLASS_FILE"
+echo "  DRF:        $DRF_FILE"
+echo "  P2C:        $P2C_FILE"
+echo "  BestFit:    $BESTFIT_FILE"
 echo "  RoundRobin: $RR_FILE"
+[ -n "$GLASS_DRL_FILE" ] && echo "  Glass-DRL:  $GLASS_DRL_FILE"
 echo ""
 
 # Function to generate comparison plot
@@ -66,6 +68,13 @@ generate_comparison "GLaSS" "$GLASS_FILE" "P2C" "$P2C_FILE" "glass_vs_p2c"
 generate_comparison "GLaSS" "$GLASS_FILE" "BestFit" "$BESTFIT_FILE" "glass_vs_bestfit"
 generate_comparison "GLaSS" "$GLASS_FILE" "RoundRobin" "$RR_FILE" "glass_vs_roundrobin"
 generate_comparison "DRF" "$DRF_FILE" "P2C" "$P2C_FILE" "drf_vs_p2c"
+
+# Glass-DRL comparisons (if data available)
+if [ -n "$GLASS_DRL_FILE" ]; then
+    generate_comparison "Glass-DRL" "$GLASS_DRL_FILE" "GLaSS" "$GLASS_FILE" "glass_drl_vs_glass"
+    generate_comparison "Glass-DRL" "$GLASS_DRL_FILE" "DRF" "$DRF_FILE" "glass_drl_vs_drf"
+    generate_comparison "Glass-DRL" "$GLASS_DRL_FILE" "BestFit" "$BESTFIT_FILE" "glass_drl_vs_bestfit"
+fi
 
 echo ""
 echo "All comparison plots generated successfully!"

@@ -57,6 +57,7 @@ class RoundRobin(BaseScheduler):
         cards: List["Card"],
         alpha: float = 1.0,
         beta: float = 0.01,
+        card_capacity: float = 5000.0,
         **kwargs,
     ):
         """
@@ -67,7 +68,7 @@ class RoundRobin(BaseScheduler):
             alpha: Weight for spike count in load calculation (default 1.0)
             beta: Weight for synaptic operations in load calculation (default 0.01)
         """
-        super().__init__(cards, alpha, beta, **kwargs)
+        super().__init__(cards, alpha, beta, card_capacity=card_capacity, **kwargs)
         
         # Current position in round-robin cycle
         self._current_index: int = 0
@@ -78,7 +79,7 @@ class RoundRobin(BaseScheduler):
         }
         
         logger.info(
-            "RoundRobin scheduler initialized with %d cards",
+            "RoundRobin scheduler initialized with %d cards, card_capacity=%.2f",
             len(cards),
         )
     

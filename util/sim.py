@@ -4,6 +4,7 @@ import logging
 import os
 import random
 from datetime import datetime
+import numpy as np
 
 from util.task import Task
 
@@ -12,14 +13,18 @@ def setup_logging(log_dir: str) -> str:
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = os.path.join(log_dir, f"simulation_{timestamp}.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_path),
-            logging.StreamHandler(),
-        ],
-    )
+
+    root = logging.getLogger()
+    # Prevent duplicate handlers when called multiple times
+    if not root.handlers:
+        root.setLevel(logging.INFO)
+        fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        fh = logging.FileHandler(log_path)
+        fh.setFormatter(fmt)
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        root.addHandler(fh)
+        root.addHandler(sh)
     return log_path
 
 
@@ -45,35 +50,26 @@ def build_arrival_plan(mode: str, total_tasks: int, steps: int) -> list[int]:
         return plan
 
     if mode == "poisson":
-        rate = max(0.1, total_tasks / float(steps))
-        produced = 0
-        t = 0.0
-        while produced < total_tasks:
-            t += random.expovariate(rate)
-            if t >= steps:
-                break
-            plan[int(t)] += 1
-            produced += 1
-        while produced < total_tasks:
-            plan[produced % steps] += 1
-            produced += 1
+        # 使用多项分布模拟固定总数的随机到达
+        # 需要 import numpy as np
+        plan = np.random.multinomial(total_tasks, [1/steps]*steps).tolist()
 
     elif mode == "bursty":
-        remaining = total_tasks
-        if steps == 1:
-            plan[0] = total_tasks
-        else:
-            burst_points = [0, max(1, steps // 2)]
-            burst_weights = [0.6, 0.3]
-            for step_idx, weight in zip(burst_points, burst_weights):
-                alloc = min(remaining, int(total_tasks * weight))
-                plan[step_idx] += alloc
-                remaining -= alloc
-            idx = 0
-            while remaining > 0:
-                plan[idx % steps] += 1
-                remaining -= 1
-                idx += 1
+        """
+        使用帕累托分布生成突发流量。
+        shape (alpha) 越小，突发性越强（长尾效应越明显）。
+        通常取值 1.0 - 3.0 之间。
+        """
+        # 1. 生成基础概率分布
+        # 使用 Pareto 分布生成权重，然后归一化
+        # numpy.random.pareto accepts `a` (shape) and `size` parameters
+        raw_weights = np.random.pareto(a=3.0, size=steps)
+        probs = raw_weights / raw_weights.sum() 
+        
+        # 2. 根据概率分配任务 (Multinomial Distribution)
+        # 这比 while 循环快得多，且能保证总数为 total_tasks
+        plan = np.random.multinomial(total_tasks, probs).tolist()
+
 
     elif mode == "mixed":
         base = int(total_tasks * 0.4)

@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # High-contrast palette
-COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00"]
+COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00", "#e74c3c"]
 # Use available fonts first to avoid warnings; prefer DejaVu (bundled with matplotlib)
 plt.rcParams["font.family"] = ["DejaVu Sans", "DejaVu Serif", "sans-serif"]
 

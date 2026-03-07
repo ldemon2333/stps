@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # High-contrast palette
-COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00"]
+COLORS = ["#0b3c5d", "#b22222", "#2f4f4f", "#5e35b1", "#006400", "#ff8c00", "#e74c3c"]
 plt.rcParams["font.family"] = ["DejaVu Sans", "DejaVu Serif", "sans-serif"]
 
 
@@ -128,11 +128,19 @@ def infer_label(csv_path: Path) -> str:
     
     # Extract scheduler name (first part before _)
     parts = name.split("_")
-    scheduler = parts[0] if parts else name
+    # Handle two-part prefixes like glass_drl
+    if len(parts) >= 2 and parts[0] == "glass" and parts[1] == "drl":
+        scheduler = "glass_drl"
+    else:
+        scheduler = parts[0] if parts else name
     
     # Map to readable names
     scheduler_names = {
-        "glass": "GLaSS",
+        "glass": "Glass",
+        "gandiva": "Gandiva",
+        "gandivaspike": "Gandiva",
+        "glass-drl": "Glass-DRL",
+        "glass_drl": "Glass-DRL",
         "bestfit": "BestFit",
         "drf": "DRF",
         "p2c": "P2C",

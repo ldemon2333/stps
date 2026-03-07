@@ -1,14 +1,26 @@
-"""Unified simulation engine supporting pluggable schedulers."""
+"""Unified simulation engine supporting pluggable schedulers.
+
+This module provides the main simulation loop for SNN cluster experiments.
+It supports any scheduler that implements the BaseScheduler interface.
+
+Key Components:
+- SimulationEngine: Main class managing simulation lifecycle
+- run_simulation: Convenience function for running experiments
+
+Two-Tier Timing Architecture:
+- Physical layer (~1ms): High-frequency task execution ticks
+- Scheduler layer (~500ms): Low-frequency migration decisions
+"""
 from __future__ import annotations
 
 import logging
 import random
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Type
+from typing import List, Optional
+import numpy as np
 
 from schedule.base import BaseScheduler, get_scheduler
 from schedule.placement_strategy import (
-    PlacementStrategy,
     BestFitStrategy,
     P2CStrategy,
     DRFStrategy,
@@ -19,9 +31,6 @@ from util.metrics import MetricsWriter, SimulationMetrics
 from util.sim import build_arrival_plan, create_task, setup_logging
 from util.task import Task
 
-if TYPE_CHECKING:
-    pass
-
 logger = logging.getLogger(__name__)
 
 # Default load weights
@@ -31,38 +40,6 @@ DEFAULT_BETA = 0.01
 # Two-tier timing architecture constants
 # Physical layer runs at higher frequency within each scheduler epoch
 DEFAULT_TICKS_PER_STEP = 10  # Number of physical ticks per scheduler step
-
-
-def select_card_for_placement(cards: List[Card], task: Task) -> Optional[Card]:
-    """
-    Select the best card for initial task placement.
-    
-    Uses Best-Fit strategy: select the card with most remaining resources
-    that can host the task.
-    
-    Args:
-        cards: Available cards
-        task: Task to place
-        
-    Returns:
-        Selected card, or None if no card can host the task
-    """
-    eligible = [c for c in cards if c.can_host(task)]
-    if not eligible:
-        return None
-    
-    def remaining_capacity(card: Card) -> tuple:
-        used_cores = sum(t.cores_required for t in card.tasks)
-        used_mem = sum(t.memory_gb_required for t in card.tasks)
-        used_syn = sum(t.synapses_required for t in card.tasks)
-        return (
-            card.cores - used_cores,
-            card.memory_gb - used_mem,
-            card.synapses - used_syn,
-            -len(card.tasks),  # Prefer cards with fewer tasks
-        )
-    
-    return max(eligible, key=remaining_capacity)
 
 
 class SimulationEngine:
@@ -89,6 +66,7 @@ class SimulationEngine:
         load_metric: str = "weighted",
         ticks_per_step: int = DEFAULT_TICKS_PER_STEP,
         data_output: Optional[str] = None,
+        card_capacity: float = 4000.0,
         **scheduler_kwargs,
     ):
         """
@@ -108,6 +86,7 @@ class SimulationEngine:
             placement_strategy: Placement strategy to use (None, "bestfit", "p2c", "drf", "rr")
             load_metric: Load metric for P2C strategy ("weighted", "drf", "tasks")
             ticks_per_step: Physical ticks per scheduler step (two-tier timing)
+            card_capacity: Load threshold for SLA violation detection
             **scheduler_kwargs: Additional arguments for scheduler
         """
         self.scheduler_name = scheduler_name
@@ -124,6 +103,7 @@ class SimulationEngine:
         self.load_metric = load_metric
         self.ticks_per_step = ticks_per_step
         self.data_output = data_output
+        self.card_capacity = card_capacity
         self.scheduler_kwargs = scheduler_kwargs
         
         # Will be initialized in run()
@@ -134,6 +114,71 @@ class SimulationEngine:
         self.metrics: Optional[SimulationMetrics] = None
         self.metrics_writer: Optional[MetricsWriter] = None
     
+    def _create_placement_strategy(self):
+        """
+        Create placement strategy based on configuration.
+        
+        Returns:
+            PlacementStrategy instance or None if using scheduler's default
+        """
+        if not self.placement_strategy:
+            return None
+        
+        strategy_map = {
+            "bestfit": BestFitStrategy,
+            "p2c": P2CStrategy,
+            "drf": DRFStrategy,
+            "rr": RoundRobinStrategy,
+        }
+        strategy_class = strategy_map.get(self.placement_strategy.lower())
+        if strategy_class is None:
+            raise ValueError(
+                f"Unknown placement strategy: {self.placement_strategy}. "
+                f"Available: {', '.join(strategy_map.keys())}"
+            )
+        
+        # P2C strategy needs load_metric parameter
+        if self.placement_strategy.lower() == "p2c":
+            strategy = strategy_class(
+                self.cards, 
+                self.alpha, 
+                self.beta,
+                load_metric=self.load_metric
+            )
+        else:
+            strategy = strategy_class(
+                self.cards, 
+                self.alpha, 
+                self.beta
+            )
+        
+        logger.info("Using placement strategy: %s", self.placement_strategy.upper())
+        return strategy
+    
+    def _initialize_scheduler(self, scheduler_class: type, placement_strategy) -> BaseScheduler:
+        """
+        Initialize the scheduler with the given class and strategy.
+        
+        Args:
+            scheduler_class: Scheduler class to instantiate
+            placement_strategy: Optional placement strategy
+            
+        Returns:
+            Initialized scheduler instance
+        """
+        scheduler_kwargs = {
+            "cards": self.cards,
+            "alpha": self.alpha,
+            "beta": self.beta,
+            "card_capacity": self.card_capacity,
+            **self.scheduler_kwargs,
+        }
+        
+        if placement_strategy is not None:
+            scheduler_kwargs["placement_strategy"] = placement_strategy
+        
+        return scheduler_class(**scheduler_kwargs)
+    
     def run(self) -> SimulationMetrics:
         """
         Run the complete simulation.
@@ -142,80 +187,33 @@ class SimulationEngine:
             Collected simulation metrics
         """
         # Setup logging
-        log_path = setup_logging(self.log_dir)
+        setup_logging(self.log_dir)
         
         # Get scheduler class
         scheduler_class = get_scheduler(self.scheduler_name)
         
         logger.info(
-            "Starting %s simulation | cards=%d tasks=%d steps=%d seed=%s arrival=%s",
+            "Starting %s simulation | cards=%d tasks=%d steps=%d seed=%s arrival=%s, card_capacity=%.2f",
             scheduler_class.__name__ if hasattr(scheduler_class, '__name__') else self.scheduler_name,
             self.card_count,
             self.task_count,
             self.steps,
             self.seed,
             self.arrival_mode,
+            self.card_capacity,
         )
         
         # Set random seed
         if self.seed is not None:
             random.seed(self.seed)
+            np.random.seed(self.seed)
         
         # Initialize cards
         self.cards = [Card(card_id=i) for i in range(self.card_count)]
         
-        # Instantiate placement strategy if specified
-        placement_strategy_obj = None
-        if self.placement_strategy:
-            strategy_map = {
-                "bestfit": BestFitStrategy,
-                "p2c": P2CStrategy,
-                "drf": DRFStrategy,
-                "rr": RoundRobinStrategy,
-            }
-            strategy_class = strategy_map.get(self.placement_strategy.lower())
-            if strategy_class is None:
-                raise ValueError(
-                    f"Unknown placement strategy: {self.placement_strategy}. "
-                    f"Available: {', '.join(strategy_map.keys())}"
-                )
-            
-            # P2C strategy needs load_metric parameter
-            if self.placement_strategy.lower() == "p2c":
-                placement_strategy_obj = strategy_class(
-                    self.cards, 
-                    self.alpha, 
-                    self.beta,
-                    load_metric=self.load_metric
-                )
-            else:
-                placement_strategy_obj = strategy_class(
-                    self.cards, 
-                    self.alpha, 
-                    self.beta
-                )
-            
-            logger.info(
-                "Using placement strategy: %s",
-                self.placement_strategy.upper()
-            )
-        
-        # Initialize scheduler
-        if placement_strategy_obj is not None:
-            self.scheduler = scheduler_class(
-                cards=self.cards,
-                alpha=self.alpha,
-                beta=self.beta,
-                placement_strategy=placement_strategy_obj,
-                **self.scheduler_kwargs,
-            )
-        else:
-            self.scheduler = scheduler_class(
-                cards=self.cards,
-                alpha=self.alpha,
-                beta=self.beta,
-                **self.scheduler_kwargs,
-            )
+        # Create placement strategy and scheduler
+        placement_strategy = self._create_placement_strategy()
+        self.scheduler = self._initialize_scheduler(scheduler_class, placement_strategy)
         
         # Initialize metrics
         self.metrics = SimulationMetrics(
@@ -225,12 +223,13 @@ class SimulationEngine:
             task_count=self.task_count,
             steps=self.steps,
             seed=self.seed,
+            card_capacity=self.card_capacity,
         )
         self.metrics.start_time = datetime.now()
         
         # Setup metrics writer
         self.metrics_writer = MetricsWriter(self.data_dir)
-        csv_path = self.metrics_writer.start_csv(
+        self.metrics_writer.start_csv(
             self.scheduler.name,
             suffix=self.arrival_mode,
             output_prefix=self.data_output,
@@ -262,7 +261,7 @@ class SimulationEngine:
                     next_task_id += 1
             
             # 2. Try to place pending tasks
-            self._place_pending_tasks()
+            self._place_pending_tasks(t)
             
             # 3. Execute physical layer ticks (two-tier timing architecture)
             # Physical layer (~1ms) runs multiple times per scheduler step (~500ms epoch)
@@ -285,6 +284,9 @@ class SimulationEngine:
             )
             self.metrics_writer.write_snapshot(snapshot)
             
+            # 6. Check SLA violations (card load > card_capacity)
+            self.metrics.check_sla_violation(t, snapshot)
+            
             # Log card states
             for card in self.cards:
                 logger.info(
@@ -294,10 +296,10 @@ class SimulationEngine:
                     snapshot.card_task_counts[card.card_id],
                 )
             
-            # 6. Reset epoch loads for next epoch
+            # 7. Reset epoch loads for next epoch
             self.scheduler.reset_epoch_loads()
             
-            # 7. Handle task completions
+            # 8. Handle task completions
             self._handle_completions(t)
             
             t += 1
@@ -323,13 +325,73 @@ class SimulationEngine:
         
         return self.metrics
     
-    def _place_pending_tasks(self) -> int:
+    # ------------------------------------------------------------------
+    # Single-step execution interface (for RL environment)
+    # These methods expose individual phases of the main loop for
+    # step-by-step control without modifying the existing run() method.
+    # ------------------------------------------------------------------
+
+    def step_arrivals(
+        self, t: int, arrival_plan: list, next_task_id: int
+    ) -> int:
+        """
+        Process task arrivals for time step *t*.
+        
+        Args:
+            t: Current scheduler time step
+            arrival_plan: Pre-built arrival schedule
+            next_task_id: Next task ID counter value
+            
+        Returns:
+            Number of new arrivals
+        """
+        arrivals = 0
+        if t <= self.steps and t <= len(arrival_plan):
+            arrivals = arrival_plan[t - 1]
+            for i in range(arrivals):
+                task = create_task(next_task_id + i, t)
+                self.pending_tasks.append(task)
+                self.scheduler.on_task_arrival(task, t)  # type: ignore
+        return arrivals
+
+    def step_placement(self, t: int) -> int:
+        """Place pending tasks. Returns number placed."""
+        return self._place_pending_tasks(t)
+
+    def step_physical_ticks(self, t: int) -> None:
+        """Execute physical-layer ticks for one scheduler epoch."""
+        for _ in range(self.ticks_per_step):
+            for task in self.active_tasks:
+                task.simulate_tick()
+            self.scheduler.record_physical_tick(t)  # type: ignore
+
+    def step_record_metrics(self, t: int) -> "LoadSnapshot":
+        """Record metrics snapshot after migrations. Returns the snapshot."""
+        from util.metrics import LoadSnapshot
+        epoch_loads = self.scheduler.get_epoch_loads()  # type: ignore
+        snapshot = self.metrics.record_load_snapshot(  # type: ignore
+            t, self.cards, self.alpha, self.beta, epoch_loads=epoch_loads
+        )
+        if self.metrics_writer is not None:
+            self.metrics_writer.write_snapshot(snapshot)
+        return snapshot
+
+    def step_reset_epoch(self) -> None:
+        """Reset scheduler epoch loads for the next epoch."""
+        self.scheduler.reset_epoch_loads()  # type: ignore
+
+    # ------------------------------------------------------------------
+
+    def _place_pending_tasks(self, time_step: int) -> int:
         """
         Attempt to place pending tasks on cards.
         
         Uses the scheduler's select_card_for_task() method for placement
         strategy. This allows different schedulers to implement their own
         policies (e.g., DRF uses dominant resource fairness).
+        
+        Args:
+            time_step: Current time step (for recording placement time)
         
         Returns:
             Number of tasks placed
@@ -342,6 +404,8 @@ class SimulationEngine:
                 continue
             if not target.put(task):
                 continue
+            # Record placement time for latency tracking
+            task.placement_step = time_step
             self.active_tasks.append(task)
             self.pending_tasks.remove(task)
             assigned += 1
@@ -367,6 +431,8 @@ class SimulationEngine:
         Returns:
             Number of tasks completed
         """
+        assert self.metrics is not None, "Metrics not initialized"
+        
         finished: List[Task] = []
         for task in self.active_tasks:
             task.duration_steps -= 1
@@ -375,6 +441,17 @@ class SimulationEngine:
         
         if finished:
             for task in finished:
+                # Record completion time for latency tracking
+                task.completion_step = time_step
+                
+                # Record task delay in metrics
+                self.metrics.record_task_delay(
+                    task_id=task.task_id,
+                    arrival_step=task.arrival_step,
+                    placement_step=task.placement_step,
+                    completion_step=task.completion_step,
+                )
+                
                 # Remove from host card
                 if 0 <= task.host_card_id < len(self.cards):
                     host_card = self.cards[task.host_card_id]

@@ -36,14 +36,17 @@ def parse_args() -> argparse.Namespace:
 ALGO_NAMES = {
     "bestfit": "BestFit",
     "drf": "DRF",
-    "gandivaspike": "Gandiva",
-    "glass": "GLaSS",
+    "gandiva": "Gandiva",
+    "gandivaspike": "Gandiva",  # legacy name
+    "glass": "Glass",
+    "glass-drl": "Glass-DRL",
+    "glass_drl": "Glass-DRL",
     "p2c": "P2C",
     "roundrobin": "RR",
 }
 
 # Display order
-ALGO_ORDER = ["GLaSS", "Gandiva", "BestFit", "DRF", "P2C", "RR"]
+ALGO_ORDER = ["Gandiva", "Glass", "Glass-DRL", "BestFit", "DRF", "P2C", "RR"]
 
 
 def parse_summary_file(filepath: Path) -> dict:
@@ -60,9 +63,9 @@ def parse_summary_file(filepath: Path) -> dict:
     # Split by seed sections
     seed_pattern = r"Seed: (\d+) -"
     metric_patterns = {
-        "CV": r"(\w+): Avg CV = ([\d.]+), Max CV = ([\d.]+), Min CV = ([\d.]+)",
-        "JFI": r"(\w+): Avg JFI = ([\d.]+), Min JFI = ([\d.]+), Max JFI = ([\d.]+)",
-        "LIF": r"(\w+): Avg LIF = ([\d.]+), Max LIF = ([\d.]+), Min LIF = ([\d.]+)",
+        "CV": r"([\w-]+): Avg CV = ([\d.]+), Max CV = ([\d.]+), Min CV = ([\d.]+)",
+        "JFI": r"([\w-]+): Avg JFI = ([\d.]+), Min JFI = ([\d.]+), Max JFI = ([\d.]+)",
+        "LIF": r"([\w-]+): Avg LIF = ([\d.]+), Max LIF = ([\d.]+), Min LIF = ([\d.]+)",
     }
     
     current_seed = None

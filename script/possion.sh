@@ -5,11 +5,17 @@
 set -e
 
 # ============ Configuration ============
-SEEDS=(0 10 21 42 123 456 789 1234 5678 91011)  # Multiple seeds for reproducibility
+SEEDS=(0 10 21 42 123 456 789 1234)  # Multiple seeds for reproducibility
 CARDS=16
-TASKS=4096
-STEPS=218
+TASKS=2048
+STEPS=256
 ARRIVAL_MODE=poisson
+
+# GLaSS-DRL configuration
+MODEL_PATH="${MODEL_PATH:-models/glass_drl.zip}"
+DELTA="${DELTA:-1.0}"
+TOP_K="${TOP_K:-10}"
+WINDOW_SIZE="${WINDOW_SIZE:-16}"
 
 # Output directories
 DATA_DIR="data"
@@ -30,6 +36,9 @@ SUMMARY_FILE="$RESULT_DIR/metrics_summary_${TIMESTAMP}.txt"
 run_analysis_for_seed() {
     local seed=$1
     local metrics_file="$RESULT_DIR/metrics_seed${seed}.txt"
+    
+    # Overwrite (not append) to prevent stale data from prior runs
+    > "$metrics_file"
     
     echo "========================================" | tee -a "$metrics_file"
     echo "Seed: $seed - $(date)" | tee -a "$metrics_file"
@@ -55,12 +64,18 @@ run_analysis_for_seed() {
     echo "=== CV Comparison ===" >> "$metrics_file"
     python plot/compare_cv.py "$DATA_DIR"/*_${ARRIVAL_MODE}_*.csv --output "$PLOT_DIR/compare_cv_seed${seed}.png" 2>&1 | tee -a "$metrics_file"
     
+    # Run DRL comparison plot
+    echo "" >> "$metrics_file"
+    echo "=== DRL Comparison ===" >> "$metrics_file"
+    python plot/plot_drl_comparison.py --data-dir "$DATA_DIR" --output-dir "$PLOT_DIR" 2>&1 | tee -a "$metrics_file"
+    
     echo "" >> "$metrics_file"
     echo "Plots saved:" >> "$metrics_file"
     echo "  - $PLOT_DIR/cv_seed${seed}.png" >> "$metrics_file"
     echo "  - $PLOT_DIR/jfi_seed${seed}.png" >> "$metrics_file"
     echo "  - $PLOT_DIR/lif_seed${seed}.png" >> "$metrics_file"
     echo "  - $PLOT_DIR/compare_cv_seed${seed}.png" >> "$metrics_file"
+    echo "  - $PLOT_DIR/drl_comparison_seed${seed}.png" >> "$metrics_file"
     echo "" >> "$metrics_file"
     
     # Append to summary file
@@ -81,6 +96,7 @@ echo "=============================================="
 echo "Seeds: ${SEEDS[*]}"
 echo "Cards: $CARDS, Tasks: $TASKS, Steps: $STEPS"
 echo "Arrival Mode: $ARRIVAL_MODE"
+echo "DRL Model: $MODEL_PATH (delta=$DELTA, top_k=$TOP_K, window=$WINDOW_SIZE)"
 echo "Results will be saved to: $RESULT_DIR"
 echo "Summary file: $SUMMARY_FILE"
 echo "=============================================="
@@ -100,7 +116,7 @@ for seed in "${SEEDS[@]}"; do
     echo "=============================================="
     echo ""
     
-    # Run all schedulers with make compare
+    # Run all schedulers (including glass-drl) with make compare
     make compare \
         SEED=$seed \
         CARDS=$CARDS \
@@ -108,7 +124,11 @@ for seed in "${SEEDS[@]}"; do
         STEPS=$STEPS \
         ARRIVAL_MODE=$ARRIVAL_MODE \
         DATA_DIR=$DATA_DIR \
-        LOG_DIR=$LOG_DIR
+        LOG_DIR=$LOG_DIR \
+        MODEL_PATH=$MODEL_PATH \
+        DELTA=$DELTA \
+        TOP_K=$TOP_K \
+        WINDOW_SIZE=$WINDOW_SIZE
     
     echo ""
     echo "Simulation complete for seed=$seed. Running analysis..."

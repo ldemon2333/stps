@@ -23,7 +23,7 @@ class BestFitScheduler(BaseScheduler):
     Tasks are placed using Best-Fit strategy (select card with most remaining resources).
     
     Unlike the base class, this scheduler tracks accumulated epoch loads
-    (same as GLaSS) to ensure fair comparison in metrics.
+    (same as GG/GLaSS) to ensure fair comparison in metrics.
     """
     
     def __init__(
@@ -49,7 +49,7 @@ class BestFitScheduler(BaseScheduler):
         """
         Accumulate load samples during physical layer ticks.
         
-        Same as GLaSS: accumulates instantaneous loads over the epoch
+        Same as GG/GLaSS: accumulates instantaneous loads over the epoch
         for fair comparison in metrics.
         """
         for card in self.cards:

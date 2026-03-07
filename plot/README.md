@@ -2,6 +2,20 @@
 
 本目录包含用于可视化 GLaSS 调度器仿真结果的脚本。
 
+## 支持的调度器
+
+所有绘图脚本均支持以下调度器，可从 CSV 文件名或内容中自动识别：
+
+| 调度器名称 | CSV 文件前缀 | 显示名称 | 类型 |
+|-----------|-------------|---------|------|
+| Gandiva   | `gandiva_`  | Gandiva | 动态调度 |
+| Glass     | `glass_`    | Glass   | 动态调度 (GG) |
+| Glass-DRL | `glass_drl_`| Glass-DRL | 深度强化学习 |
+| BestFit   | `bestfit_`  | BestFit | 静态调度 |
+| DRF       | `drf_`      | DRF     | 静态调度 |
+| P2C       | `p2c_`      | P2C     | 静态调度 |
+| RoundRobin| `rr_`       | RR      | 静态调度 |
+
 ## 脚本说明
 
 ### 1. `plot_step_loads.py`
@@ -116,17 +130,21 @@ $$CV = \frac{\sigma}{\mu} = \frac{\sqrt{\text{variance}}}{\text{mean}}$$
 
 **使用方法：**
 ```bash
-# 对比 GLaSS 与其他算法
+# 对比 GLaSS 与其他算法（含 Glass-DRL）
 python plot/plot_cv.py data/glass_poisson_loads_*.csv data/drf_poisson_loads_*.csv \
   data/p2c_poisson_loads_*.csv data/bestfit_poisson_loads_*.csv \
-  data/roundrobin_poisson_loads_*.csv \
-  --labels GLaSS DRF P2C BestFit RoundRobin --output plot/cv_comparison.png
+  data/roundrobin_poisson_loads_*.csv data/glass_drl_poisson_loads_*.csv \
+  --labels GLaSS DRF P2C BestFit RoundRobin Glass-DRL --output plot/cv_comparison.png
+
+# 自动从文件名推断标签（推荐）
+python plot/plot_cv.py data/*_loads_*.csv --output plot/cv_comparison.png
 ```
 
 **典型输出：**
 ```
 GLaSS: Avg CV = 0.2906, Max CV = 1.7321, Min CV = 0.0419
 RoundRobin: Avg CV = 0.3165, Max CV = 1.7321, Min CV = 0.0500
+Glass-DRL: Avg CV = 0.2750, Max CV = 1.5000, Min CV = 0.0380
 Saved CV comparison plot to plot/cv_comparison.png
 ```
 
@@ -159,17 +177,21 @@ $$\mathcal{J} = \frac{(\sum_{m=1}^{M} L_m)^2}{M \cdot \sum_{m=1}^{M} L_m^2}$$
 
 **使用方法：**
 ```bash
-# 对比 GLaSS 与其他算法
+# 对比 GLaSS 与其他算法（含 Glass-DRL）
 python plot/plot_jfi.py data/glass_poisson_loads_*.csv data/drf_poisson_loads_*.csv \
   data/p2c_poisson_loads_*.csv data/bestfit_poisson_loads_*.csv \
-  data/roundrobin_poisson_loads_*.csv \
-  --labels GLaSS DRF P2C BestFit RoundRobin --output plot/jfi_comparison.png
+  data/roundrobin_poisson_loads_*.csv data/glass_drl_poisson_loads_*.csv \
+  --labels GLaSS DRF P2C BestFit RoundRobin Glass-DRL --output plot/jfi_comparison.png
+
+# 自动从文件名推断标签（推荐）
+python plot/plot_jfi.py data/*_loads_*.csv --output plot/jfi_comparison.png
 ```
 
 **典型输出：**
 ```
 GLaSS: Avg JFI = 0.9108, Min JFI = 0.2500, Max JFI = 0.9983
 RoundRobin: Avg JFI = 0.8991, Min JFI = 0.2500, Max JFI = 0.9975
+Glass-DRL: Avg JFI = 0.9250, Min JFI = 0.3000, Max JFI = 0.9990
 Saved JFI comparison plot to plot/jfi_comparison.png
 ```
 
@@ -202,11 +224,14 @@ $$\text{LIF} = \frac{\rho_{\max}}{\rho_{\text{avg}}} - 1$$
 
 **使用方法：**
 ```bash
-# 对比所有算法的 LIF
+# 对比所有算法的 LIF（含 Glass-DRL）
 python plot/LIF.py data/glass_poisson_loads_*.csv data/drf_poisson_loads_*.csv \
   data/p2c_poisson_loads_*.csv data/bestfit_poisson_loads_*.csv \
-  data/roundrobin_poisson_loads_*.csv \
-  --labels GLaSS DRF P2C BestFit RoundRobin --output plot/lif_comparison.png
+  data/roundrobin_poisson_loads_*.csv data/glass_drl_poisson_loads_*.csv \
+  --labels GLaSS DRF P2C BestFit RoundRobin Glass-DRL --output plot/lif_comparison.png
+
+# 自动从文件名推断标签（推荐）
+python plot/LIF.py data/*_loads_*.csv --output plot/lif_comparison.png
 ```
 
 **典型输出：**
@@ -217,6 +242,27 @@ P2C: Avg LIF = 1.4575, Min LIF = 0.3640, Max LIF = 15.0000
 BestFit: Avg LIF = 2.0373, Min LIF = 0.7431, Max LIF = 15.0000
 RoundRobin: Avg LIF = 1.7974, Min LIF = 0.5981, Max LIF = 15.0000
 Saved LIF comparison plot to plot/lif_comparison.png
+```
+
+---
+
+### 8. `plot_drl_comparison.py`
+
+**功能：** 专用于 GLaSS-DRL 与基线调度器的多维对比分析，生成 CV、JFI、LIF 和 SLA 违规率的对比图表。
+
+**输入：** 自动扫描 `data/` 目录下所有调度器的 CSV 文件
+- 支持 `glass_drl_loads_*.csv`、`glass_loads_*.csv`、`gandiva_loads_*.csv` 等
+- 同时支持 `glass-drl`、`glass_drl`、`glassdrl` 三种文件名变体
+
+**输出：** 多个对比图表（PNG 格式），包含 CV、JFI、LIF 时间序列对比
+
+**使用方法：**
+```bash
+# 使用默认数据目录
+python plot/plot_drl_comparison.py
+
+# 指定数据目录和输出目录
+python plot/plot_drl_comparison.py --data-dir data --output-dir figures
 ```
 
 ---
@@ -311,19 +357,28 @@ $$\text{LIF} = \frac{\rho_{\max}}{\rho_{\text{avg}}} - 1$$
 
 1. **运行仿真** (在项目根目录)
    ```bash
-   make dynamic    # 运行 GLaSS 动态调度器
-   make static     # 运行 Static 静态调度器
+   make compare    # 运行所有调度器（含 Glass-DRL）
+   # 或单独运行
+   make glass-drl  # 运行 GLaSS-DRL 调度器
+   make glass      # 运行 GLaSS (GG) 动态调度器
+   make gandiva    # 运行 GLaSS 动态调度器
    ```
 
 2. **绘制单个调度器的结果**
    ```bash
-   python plot/plot_static_loads.py data/static_loads_*.csv
-   python plot/plot_static_loads.py data/glass_loads_*.csv
+   python plot/plot_step_loads.py data/glass_drl_loads_*.csv
+   python plot/plot_step_loads.py data/glass_loads_*.csv
    ```
 
-3. **对比两个调度器**
+3. **对比所有调度器**
    ```bash
-   python plot/plot_compare_variance.py data/glass_loads_*.csv data/static_loads_*.csv
+   # 自动扫描所有加载数据
+   python plot/plot_cv.py data/*_loads_*.csv
+   python plot/plot_jfi.py data/*_loads_*.csv
+   python plot/LIF.py data/*_loads_*.csv
+   
+   # DRL 专用多维对比
+   python plot/plot_drl_comparison.py --data-dir data
    ```
 
 4. **可视化任务特性**（可选）
@@ -332,7 +387,7 @@ $$\text{LIF} = \frac{\rho_{\max}}{\rho_{\text{avg}}} - 1$$
    ```
 
 5. **查看结果**
-   - 图表：`plot/*.pdf`
+   - 图表：`plot/*.png`, `figures/*.png`
    - 数据：`data/variance_comparison_*.csv`
 
 ---

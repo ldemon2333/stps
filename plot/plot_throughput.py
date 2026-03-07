@@ -42,9 +42,12 @@ def load_summary_data(csv_path: Path) -> Dict:
 
 def infer_label(csv_path: Path) -> str:
     """Infer scheduler name from filename."""
-    stem = csv_path.stem
-    prefix = stem.split("_")[0]
-    return prefix
+    stem = csv_path.stem.lower()
+    parts = stem.split("_")
+    # Handle two-part prefixes like glass_drl
+    if len(parts) >= 2 and parts[0] == "glass" and parts[1] == "drl":
+        return "glass_drl"
+    return parts[0]
 
 
 def main() -> None:

@@ -1,34 +1,33 @@
-"""Gandiva-Spike: Smallest-First Dynamic Load Balancing Baseline.
+"""GLaSS: Global Load-aware SNN Scheduler with Smallest-First strategy.
 
-A dynamic baseline scheduler for comparison with GLaSS. It inherits from GLaSS
+The main GLaSS dynamic scheduler. It inherits from GG (GLaSS-Greedy)
 and only differs in the migration task selection strategy:
-- GLaSS: ROI-Greedy (prioritize high-load tasks with small state)
-- Gandiva-Spike: Smallest-First (prioritize low-load tasks)
+- GG: ROI-Greedy (prioritize high-load tasks with small state)
+- GLaSS: Smallest-First (prioritize low-load tasks)
 
 This design minimizes code changes while providing a controlled comparison
 that isolates the effect of the migration selection strategy.
-
-Reference: Gandiva-Spike.md in docs/
 """
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from .base import register_scheduler
 from .glass import GLaSS, CardState
 
 if TYPE_CHECKING:
     from util.card import Card
+    from util.task import Task
 
 logger = logging.getLogger(__name__)
 
 
 class GandivaSpike(GLaSS):
     """
-    Gandiva-Spike: Smallest-First Dynamic Scheduler Baseline.
+    GLaSS: Global Load-aware SNN Scheduler with Smallest-First strategy.
     
-    Inherits from GLaSS and reuses:
+    Inherits from GG (GLaSS-Greedy) and reuses:
     - Accumulated load tracking (_task_epoch_load, _card_epoch_load)
     - record_physical_tick() method
     - reset_epoch_loads() method  
@@ -41,24 +40,24 @@ class GandivaSpike(GLaSS):
     - step(): Smallest-First task selection instead of ROI-Greedy
     
     The key difference is in Phase 2 (Decision):
-    - GLaSS sorts tasks by efficiency_score DESCENDING (high-load first)
-    - Gandiva-Spike sorts tasks by epoch_load ASCENDING (low-load first)
+    - GG sorts tasks by efficiency_score DESCENDING (high-load first)
+    - GLaSS sorts tasks by epoch_load ASCENDING (low-load first)
     """
     
     @property
     def name(self) -> str:
-        return "GandivaSpike"
+        return "Gandiva"
     
     def step(self, time_step: int) -> None:
         """
         Perform global load balancing using Smallest-First strategy.
         
-        Three-phase algorithm (same structure as GLaSS):
+        Three-phase algorithm (same structure as GG):
         1. Sense Phase: Classify cards (CRITICAL/AVAILABLE/STABLE)
         2. Decision Phase: Smallest-First task selection [KEY DIFFERENCE]
         3. Execution Phase: Best-Fit target allocation
         """
-        logger.info("--- Time Step %s Global Balancing (GandivaSpike) ---", time_step)
+        logger.info("--- Time Step %s Global Balancing (GLaSS) ---", time_step)
         
         # =================================================================
         # Phase 1: Sense - Classify cards (identical to GLaSS)
@@ -234,6 +233,70 @@ class GandivaSpike(GLaSS):
                     if not available_cards:
                         logger.info("   >>> No more AVAILABLE cards; stopping migration.")
                         break
+
+    def suggest_action(
+        self, time_step: int
+    ) -> Optional[Tuple["Task", "Card"]]:
+        """
+        Run GLaSS three-phase algorithm but only **suggest** one migration
+        without executing it. Used by SafetyGate to obtain A_base.
+        
+        Returns:
+            (task, target_card) pair, or None if no migration is suggested.
+        """
+        # Phase 1: Sense
+        card_normalized_loads: Dict[int, float] = {}
+        critical_cards: List["Card"] = []
+        available_cards: List["Card"] = []
+
+        for card in self.cards:
+            normalized_load = self._get_normalized_card_load(card)
+            card_normalized_loads[card.card_id] = normalized_load
+            state = self._classify_card(normalized_load)
+            if state == CardState.CRITICAL:
+                critical_cards.append(card)
+            elif state == CardState.AVAILABLE:
+                available_cards.append(card)
+
+        if not critical_cards or not available_cards:
+            return None
+
+        # Phase 2: Decision — pick first migration candidate (Smallest-First)
+        for source_card in critical_cards:
+            if not available_cards:
+                break
+
+            active_tasks = [
+                t for t in source_card.tasks if t.current_spike_count > 0
+            ]
+            if not active_tasks:
+                continue
+
+            sorted_tasks = sorted(
+                active_tasks,
+                key=lambda t: self._get_task_epoch_load(t),
+                reverse=False,
+            )
+
+            source_load = card_normalized_loads[source_card.card_id]
+            delta_target = source_load - self.THETA_SAFE
+            if delta_target <= 0:
+                continue
+
+            task = sorted_tasks[0]
+            normalized_task_load = self._get_task_epoch_load(task) / self.card_capacity
+
+            target_card = self._placement_strategy.select_migration_target(
+                task=task,
+                candidate_cards=available_cards,
+                task_load=normalized_task_load,
+                card_loads=card_normalized_loads,
+                load_threshold=self.THETA_HIGH,
+            )
+            if target_card is not None:
+                return (task, target_card)
+
+        return None
 
 
 # Register Gandiva-Spike in the scheduler registry

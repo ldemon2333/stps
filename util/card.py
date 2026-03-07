@@ -91,3 +91,39 @@ class Card:
             total += (alpha * task.current_spike_count) + (beta * task.current_synaptic_ops)
         self.current_load = total
         return total
+
+    def calculate_comm_load(self) -> float:
+        """
+        Calculate communication load across all tasks on this card.
+        
+        L_comm = Σ_k λ_k × FanOut_k × D_hops(k)
+        where λ_k is the firing rate (spike_count / neuron_count).
+        """
+        comm_load = 0.0
+        for task in self.tasks:
+            firing_rate = task.current_spike_count / max(task.neuron_count, 1)
+            comm_load += firing_rate * task.fan_out * task.avg_hop_distance
+        return comm_load
+
+    def calculate_composite_load(
+        self, alpha: float, beta: float, comm_weight: float = 0.3
+    ) -> float:
+        """
+        Calculate composite load combining computation and communication.
+        
+        L_node = α·L_comp + β·Sigmoid(L_comm)
+        
+        Args:
+            alpha: Weight for computation load
+            beta: Weight for communication load (applied via sigmoid)
+            comm_weight: Scaling factor for communication component
+            
+        Returns:
+            Composite load value
+        """
+        import math
+        comp_load = self.calculate_load(alpha, beta)
+        comm_load = self.calculate_comm_load()
+        # Sigmoid normalization for communication load
+        sigmoid_comm = 1.0 / (1.0 + math.exp(-comm_load)) if comm_load < 500 else 1.0
+        return comp_load + comm_weight * sigmoid_comm

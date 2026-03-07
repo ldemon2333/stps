@@ -9,8 +9,11 @@ Examples:
     # Run static baseline
     python main.py --scheduler static --cards 4 --tasks 100
 
-    # Run GLaSS dynamic scheduler  
+    # Run GG (GLaSS-Greedy) dynamic scheduler  
     python main.py --scheduler glass --cards 4 --tasks 100 --arrival-mode bursty
+
+    # Run GLaSS dynamic scheduler
+    python main.py --scheduler gandiva --cards 4 --tasks 100 --arrival-mode bursty
 
     # List available schedulers
     python main.py --list-schedulers
@@ -32,7 +35,8 @@ def parse_args() -> argparse.Namespace:
         epilog="""
 Examples:
   %(prog)s --scheduler static --cards 4 --tasks 100 --steps 60
-  %(prog)s --scheduler glass --cards 4 --tasks 100 --arrival-mode bursty
+  %(prog)s --scheduler glass --cards 4 --tasks 100 --arrival-mode bursty  # GG (GLaSS-Greedy)
+  %(prog)s --scheduler gandiva --cards 4 --tasks 100 --arrival-mode bursty  # GLaSS
   %(prog)s --list-schedulers
         """,
     )
@@ -121,18 +125,18 @@ Examples:
         help="Weight for synaptic operations in load calculation (default: 0.01)",
     )
     
-    # GLaSS-specific parameters
+    # GG/GLaSS-specific parameters
     parser.add_argument(
         "--card-capacity",
         type=float,
         default=5000.0,
-        help="Card capacity for normalized load calculation in GLaSS (default: 5000.0)",
+        help="Card capacity for normalized load calculation in GG/GLaSS (default: 5000.0)",
     )
     parser.add_argument(
         "--gamma",
         type=float,
         default=1.5,
-        help="Heat preference factor for ROI calculation in GLaSS (default: 1.5)",
+        help="Heat preference factor for ROI calculation in GG (default: 1.5)",
     )
     parser.add_argument(
         "--data-output",
@@ -148,7 +152,7 @@ Examples:
         default="bestfit",
         choices=["bestfit", "p2c", "drf", "rr"],
         help="Placement strategy for task placement and migration (default: bestfit). "
-             "Use with GLaSS to customize both initial placement and migration logic.",
+             "Use with GG/GLaSS to customize both initial placement and migration logic.",
     )
     parser.add_argument(
         "--load-metric",
@@ -156,6 +160,32 @@ Examples:
         default="weighted",
         choices=["weighted", "drf", "tasks"],
         help="Load metric for P2C strategy (default: weighted)",
+    )
+    
+    # GLaSS-DRL parameters
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Path to trained DRL model (.zip) for GLaSS-DRL scheduler",
+    )
+    parser.add_argument(
+        "--delta",
+        type=float,
+        default=0.1,
+        help="Safety gate advantage threshold for GLaSS-DRL (default: 0.1)",
+    )
+    parser.add_argument(
+        "--window-size",
+        type=int,
+        default=16,
+        help="Temporal history window size for GLaSS-DRL (default: 16)",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Number of top-K active tasks for GLaSS-DRL temporal state (default: 10)",
     )
     
     return parser.parse_args()
@@ -196,6 +226,11 @@ def main() -> int:
             gamma=args.gamma,
             placement_strategy=args.placement_strategy,
             load_metric=args.load_metric,
+            # GLaSS-DRL specific
+            model_path=args.model_path,
+            delta=args.delta,
+            window_size=args.window_size,
+            top_k=args.top_k,
         )
         
         # Return 0 on success

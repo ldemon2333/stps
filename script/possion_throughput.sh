@@ -5,11 +5,17 @@
 set -e
 
 # ============ Configuration ============
-SEEDS=(0 10 21 42 123 456 789 1234 5678 91011)  # Multiple seeds for reproducibility
-CARDS=4
-TASKS=100
-STEPS=60
+SEEDS=(0 10 21 42 123 456 789 1234)  # Multiple seeds for reproducibility
+CARDS=16
+TASKS=1024
+STEPS=256
 ARRIVAL_MODE=poisson
+
+# GLaSS-DRL parameters
+MODEL_PATH="models/glass_drl.zip"
+DELTA=1.0
+TOP_K=10
+WINDOW_SIZE=16
 
 # Output directories
 DATA_DIR="data"
@@ -87,7 +93,11 @@ for seed in "${SEEDS[@]}"; do
         STEPS=$STEPS \
         ARRIVAL_MODE=$ARRIVAL_MODE \
         DATA_DIR=$DATA_DIR \
-        LOG_DIR=$LOG_DIR
+        LOG_DIR=$LOG_DIR \
+        MODEL_PATH=$MODEL_PATH \
+        DELTA=$DELTA \
+        TOP_K=$TOP_K \
+        WINDOW_SIZE=$WINDOW_SIZE
     
     echo ""
     echo "Simulation complete for seed=$seed. Collecting metrics..."

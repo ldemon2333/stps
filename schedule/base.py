@@ -1,10 +1,17 @@
-"""Base scheduler interface for extensible scheduling algorithms."""
+"""Base scheduler interface for extensible scheduling algorithms.
+
+This module provides:
+- BaseScheduler: Abstract base class for all scheduling algorithms
+- SchedulerMetrics: Dataclass for tracking migration statistics
+- MigrationEvent: Record of individual task migrations
+- Registry functions: register_scheduler, get_scheduler, list_schedulers
+"""
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from util.card import Card
@@ -69,6 +76,7 @@ class BaseScheduler(ABC):
             cards: List of neuromorphic cards in the cluster
             alpha: Weight for spike count in load calculation
             beta: Weight for synaptic operations in load calculation
+            card_capacity: Capacity of each neuromorphic card
             placement_strategy: Optional PlacementStrategy for task placement.
                 If None, uses default BestFitStrategy.
             **kwargs: Additional algorithm-specific parameters
@@ -156,7 +164,7 @@ class BaseScheduler(ABC):
         """
         pass
     
-    def get_epoch_loads(self) -> Dict[int, float]:
+    def get_epoch_loads(self) -> Optional[Dict[int, float]]:
         """
         Get accumulated load for each card over the current epoch.
         
@@ -164,10 +172,10 @@ class BaseScheduler(ABC):
         that dynamic schedulers use for decision making.
         
         Returns:
-            Dictionary mapping card_id to accumulated epoch load.
-            Default implementation returns instantaneous loads.
+            Dictionary mapping card_id to accumulated epoch load,
+            or None if not supported by this scheduler.
         """
-        return {card.card_id: card.calculate_load(self.alpha, self.beta) for card in self.cards}
+        return None
     
     def reset_epoch_loads(self) -> None:
         """
@@ -267,8 +275,8 @@ class BaseScheduler(ABC):
         
         # Execute migration
         source.evict(task)
-        succes = target.put(task)
-        assert succes, "Migration should succeed after capacity check"
+        success = target.put(task)
+        assert success, "Migration should succeed after capacity check"
           
         # Record successful migration
         self._record_migration(time_step, task, source, target)
