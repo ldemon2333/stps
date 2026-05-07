@@ -28,19 +28,21 @@ def setup_logging(log_dir: str) -> str:
     return log_path
 
 
-def create_task(task_id: int, arrival_step: int) -> Task:
-    neuron_count = random.randint(300, 1050)
-    complexity_ratio = random.uniform(0.6, 1.4)
-    base_state_mb = random.uniform(8, 20)
-    state_size_mb = base_state_mb * (0.5 + 0.5 * complexity_ratio)
-    duration_steps = random.randint(3, 12)
+def create_task(task_id: int, arrival_step: int, fingerprint) -> Task:
+    """Build a Task whose hard requirements come from the attached fingerprint.
+
+    The fingerprint determines per-tick traffic *and* the placement footprint
+    (neuron count, state size, complexity, run length), so each .npz is a
+    self-contained workload spec.
+    """
     return Task(
         task_id=task_id,
-        state_size_mb=state_size_mb,
-        neuron_count=neuron_count,
-        complexity_ratio=complexity_ratio,
+        state_size_mb=float(fingerprint.state_size_mb),
+        neuron_count=int(fingerprint.neuron_count),
+        complexity_ratio=float(fingerprint.complexity_ratio),
         arrival_step=arrival_step,
-        duration_steps=duration_steps,
+        duration_steps=int(fingerprint.T),
+        fingerprint=fingerprint,
     )
 
 

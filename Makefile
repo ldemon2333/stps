@@ -1,4 +1,4 @@
-PYTHON ?= python
+PYTHON ?= /root/miniconda3/envs/snn/bin/python
 CARDS ?= 4
 TASKS ?= 512
 STEPS ?= 512
@@ -7,219 +7,109 @@ LOG_DIR ?= log
 DATA_DIR ?= data
 ARRIVAL_MODE ?= bursty
 DATA_OUTPUT ?=
-# GG (GLaSS-Greedy) specific parameters
-CARD_CAPACITY ?= 4500
 
-# Common arguments for all simulations
+# STPS knobs
+FINGERPRINT_DIR ?= npz
+BW_MAX ?= 5e6
+D_MAX ?= 16
+HORIZON ?= 64
+SPLIT_THRESHOLD ?= 0.2
+
 COMMON_ARGS = --cards $(CARDS) --tasks $(TASKS) --steps $(STEPS) --seed $(SEED) \
-              --log-dir $(LOG_DIR) --data-dir $(DATA_DIR) --arrival-mode $(ARRIVAL_MODE) --card-capacity $(CARD_CAPACITY)
+              --log-dir $(LOG_DIR) --data-dir $(DATA_DIR) --arrival-mode $(ARRIVAL_MODE)
 
-# If DATA_OUTPUT is set, append to common args
 ifneq ($(strip $(DATA_OUTPUT)),)
 	COMMON_ARGS := $(COMMON_ARGS) --data-output $(DATA_OUTPUT)
 endif
 
-# GG (GLaSS-Greedy) specific arguments
+STPS_ARGS = --fingerprint-dir $(FINGERPRINT_DIR) --bw-max $(BW_MAX) --d-max $(D_MAX) \
+            --horizon $(HORIZON) --centrality-split-threshold $(SPLIT_THRESHOLD)
 
+.PHONY: all bestfit drf p2c rr stps stps-spatial stps-temporal \
+        list-schedulers fingerprints clean help compare compare-stps \
+        q1 q1-sweep q1-mix q1-all
 
-.PHONY: all glass gandiva p2c drf bestfit rr list-schedulers clean help plot_step_load plot_spike compare \
-        glass+bestfit glass+p2c glass+drf glass+rr \
-        train-drl eval-drl compare-drl
-
-# Define scheduler and strategy names
-SCHEDULERS := glass gandiva drf p2c bestfit rr
-STRATEGIES := bestfit p2c drf rr
-
-# Detect if this is a plot_compare_variance call
-IS_PLOT_COMPARE := $(filter plot_compare_variance,$(MAKECMDGOALS))
-SCHEDULER_ARGS := $(filter $(SCHEDULERS),$(MAKECMDGOALS))
-ifeq ($(IS_PLOT_COMPARE),plot_compare_variance)
-OVERRIDE_SCHEDULERS := 1
-endif
-
-# Extract combination targets (glass+strategy format)
-COMBO_TARGETS := $(filter glass+%,$(MAKECMDGOALS))
-COMBO_STRATEGY := $(subst glass+,,$(COMBO_TARGETS))
-
-# Run Round Robin static scheduler
+# Baselines
 rr:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
 	$(PYTHON) main.py --scheduler rr $(COMMON_ARGS)
-endif
 
-# Run bestfit static scheduler
 bestfit:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
 	$(PYTHON) main.py --scheduler bestfit $(COMMON_ARGS)
-endif
 
-# Run simulation with GG (GLaSS-Greedy) dynamic scheduler (default: Best-Fit strategy)
-glass:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS) 
-endif
-
-# Run GLaSS dynamic scheduler (main algorithm)
-gandiva:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
-	$(PYTHON) main.py --scheduler gandiva $(COMMON_ARGS) 
-endif
-
-# Run drf scheduler
 drf:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
 	$(PYTHON) main.py --scheduler drf $(COMMON_ARGS)
-endif
 
-# Run p2c scheduler
 p2c:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
 	$(PYTHON) main.py --scheduler p2c $(COMMON_ARGS)
-endif
 
-# Run glass-drl scheduler
-glass-drl:
-ifeq ($(OVERRIDE_SCHEDULERS),1)
-	@true
-else
-	$(PYTHON) main.py --scheduler glass_drl --model-path $(MODEL_PATH) --delta $(DELTA) --top-k $(TOP_K) --window-size $(WINDOW_SIZE) $(COMMON_ARGS)
-endif
+# STPS family (paper §4.3)
+stps:
+	$(PYTHON) main.py --scheduler stps $(COMMON_ARGS) $(STPS_ARGS)
 
-# GG with specific placement strategies (glass+strategy format)
-# These targets allow using a strategy with GG without running it as a separate scheduler
+stps-spatial:
+	$(PYTHON) main.py --scheduler stps-spatial $(COMMON_ARGS) $(STPS_ARGS)
 
-# GG + Best-Fit Strategy
-glass+bestfit:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy bestfit
+stps-temporal:
+	$(PYTHON) main.py --scheduler stps-temporal $(COMMON_ARGS) $(STPS_ARGS)
 
-# GG + P2C Strategy
-glass+p2c:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy p2c
+# Generate offline fingerprints (synthetic by default; replace with real ones for paper experiments).
+fingerprints:
+	mkdir -p $(FINGERPRINT_DIR)
+	$(PYTHON) -m fingerprint.cli --synthetic --T $(HORIZON) --beta 4.0 --K 2 \
+	    --out $(FINGERPRINT_DIR)/synthetic_bursty.npz
+	$(PYTHON) -m fingerprint.cli --synthetic --T $(HORIZON) --beta 1.05 --K 1 \
+	    --out $(FINGERPRINT_DIR)/synthetic_flat.npz
+	$(PYTHON) -m fingerprint.cli --synthetic --T $(HORIZON) --beta 8.0 --K 3 \
+	    --out $(FINGERPRINT_DIR)/synthetic_extreme.npz
 
-# GG + DRF Strategy
-glass+drf:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy drf
+# Run baselines + STPS family for comparison
+compare: bestfit drf p2c rr
+compare-stps: bestfit drf p2c rr stps stps-spatial stps-temporal
 
-# GG + Round-Robin Strategy
-glass+rr:
-	$(PYTHON) main.py --scheduler glass $(COMMON_ARGS)  --placement-strategy rr
+# Q1 — Spatial Load Balancing via Step A (see docs/Q1_TODO.md)
+q1:
+	$(PYTHON) script/q1_run.py main
 
-# Run all schedulers for comparison
-compare: glass-drl glass gandiva drf p2c bestfit rr
+q1-sweep:
+	$(PYTHON) script/q1_run.py sweep
 
-# List available schedulers
+q1-mix:
+	$(PYTHON) script/q1_run.py mix
+
+q1-all:
+	$(PYTHON) script/q1_run.py all
+
 list-schedulers:
 	$(PYTHON) main.py --list-schedulers
 
-# Plotting targets
-.PHONY: plot_step_load plot_spike plot_compare_variance help
+clean:
+	rm -f $(LOG_DIR)/*.log
+	rm -f $(DATA_DIR)/*.csv
+	rm -f figures/*
 
-plot_step_load:
-	$(PYTHON) plot/plot_step_loads.py $(DATA_DIR)/*_loads*.csv --format png
-
-plot_spike:
-	$(PYTHON) plot/plot_task_spikes.py --steps 60 --neuron-count 900 --complexity 1.2 --state-mb 14 --seed 21
-
-plot_compare_variance:
-ifdef SCHEDULER_ARGS
-	@CSV_FILES=''; \
-	for sched in $(SCHEDULER_ARGS); do \
-		CSV_FILES="$$CSV_FILES $(DATA_DIR)/$${sched}_loads_*.csv"; \
-	done; \
-	$(PYTHON) plot/plot_compare_variance.py $$CSV_FILES
-else
-	@echo "Usage: make plot_compare_variance scheduler1 scheduler2 [scheduler3 ...]"
-	@echo "Example: make plot_compare_variance drf glass bestfit"
-	@echo "Available schedulers: $(SCHEDULERS)"
-endif
-
-# Help target
 help:
 	@echo "SNN Scheduler Simulation - Make Targets"
 	@echo ""
-	@echo "Basic Schedulers (run independently):"
-	@echo "  make glass          - Run GLaSS dynamic scheduler (default Best-Fit strategy)"
-	@echo "  make gandiva        - Run Gandiva-Spike dynamic scheduler (Smallest-First baseline)"
-	@echo "  make drf            - Run DRF static scheduler"
-	@echo "  make p2c            - Run P2C static scheduler"
-	@echo "  make bestfit        - Run Best-Fit static scheduler"
-	@echo "  make rr             - Run Round-Robin static scheduler"
-	@echo "  make compare        - Run all 5 schedulers in sequence"
+	@echo "Baselines:"
+	@echo "  make bestfit       - Best-Fit (greedy)"
+	@echo "  make drf           - Dominant Resource Fairness"
+	@echo "  make p2c           - Power of Two Choices"
+	@echo "  make rr            - Round Robin"
 	@echo ""
-	@echo "GLaSS with Custom Placement Strategies (glass+strategy format):"
-	@echo "  make glass+bestfit  - GLaSS using Best-Fit strategy"
-	@echo "  make glass+p2c      - GLaSS using P2C strategy"
-	@echo "  make glass+drf      - GLaSS using DRF strategy"
-	@echo "  make glass+rr       - GLaSS using Round-Robin strategy"
+	@echo "STPS family (paper §4.3):"
+	@echo "  make fingerprints  - Generate synthetic *.npz fingerprints"
+	@echo "  make stps          - Full 3-stage STPS scheduler"
+	@echo "  make stps-spatial  - Ablation: spatial-only (no phase shift)"
+	@echo "  make stps-temporal - Ablation: temporal-only (no fragmentation/hotspot split)"
 	@echo ""
-	@echo "Run Multiple Schedulers:"
-	@echo "  make glass drf      - Run both GLaSS (default) and DRF"
-	@echo "  make glass p2c rr   - Run GLaSS (default), P2C, and RR"
+	@echo "Comparison:"
+	@echo "  make compare       - Run all baselines"
+	@echo "  make compare-stps  - Run baselines + STPS family"
 	@echo ""
-	@echo "Configuration Variables (prefix to any target):"
-	@echo "  CARDS=8 make glass+p2c              - Use 8 cards instead of 4"
-	@echo "  TASKS=200 make compare              - Schedule 200 tasks instead of 100"
-	@echo "  STEPS=120 make glass+drf            - Run for 120 steps instead of 60"
-	@echo "  ARRIVAL_MODE=bursty make glass+p2c  - Use bursty arrival pattern"
-	@echo "  SEED=99 make compare                - Use seed 99 for reproducibility"
-	@echo ""
-	@echo "  DATA_OUTPUT=myname make glass       - Prefix data output files with 'myname'"
-	@echo "Plotting:"
-	@echo "  make plot_step_load                   - Plot step-wise load traces"
-	@echo "  make plot_spike                       - Plot synthetic task spikes"
-	@echo "  make plot_compare_variance drf glass  - Compare variance of schedulers"
-	@echo ""
-	@echo "Scripts (in script/ directory):"
-	@echo "  bash script/demo.sh                - Demo all placement strategies"
-	@echo "  bash script/experiment_full.sh     - Full experiment (12 runs)"
-	@echo "  bash script/compare_schedulers.sh  - Generate comparison plots"
+	@echo "Knobs (prefix any target):"
+	@echo "  CARDS=8 TASKS=200 STEPS=120 SEED=99 ARRIVAL_MODE=bursty"
+	@echo "  BW_MAX=5e6 D_MAX=16 HORIZON=64 FINGERPRINT_DIR=npz"
 	@echo ""
 	@echo "Utilities:"
-	@echo "  make list-schedulers - List available scheduler names"
-	@echo "  make clean           - Remove all generated CSV/PNG/PDF files"
-	@echo "  make help            - Show this help message"
-	@echo ""
-	@echo "Documentation:"
-	@echo "  README.md            - Quick start guide"
-	@echo "  docs/algorithm.md    - Algorithm theory"
-	@echo "  docs/pseudocode.md   - GLaSS pseudocode"
-	@echo "  docs/experiment.md   - Experiment guide"
-
-
-# Clean generated files
-clean:
-	rm -f $(LOG_DIR)/*.log 
-	rm -f $(DATA_DIR)/*.csv
-	rm -f plot/*.pdf
-	rm -f figures/*
-	find plot -name '*.png' -not -name 'metrics*.png' -not -name 'throughput_metrics*.png' -delete
-	rm -f results/*.csv
-
-# GLaSS-DRL targets
-MODEL_PATH ?= models/glass_drl.zip
-DRL_TIMESTEPS ?= 200000
-DELTA ?= 0.1
-TOP_K ?= 10
-WINDOW_SIZE ?= 16
-
-train-drl:
-	bash script/train_drl.sh
-
-eval-drl:
-	bash script/eval_drl.sh
-
-compare-drl: gandiva glass bestfit drf p2c
-	$(PYTHON) main.py --scheduler glass_drl $(COMMON_ARGS) --model-path $(MODEL_PATH) --delta $(DELTA) --top-k $(TOP_K) --window-size $(WINDOW_SIZE)
-	$(PYTHON) plot/plot_drl_comparison.py --data-dir $(DATA_DIR)
+	@echo "  make list-schedulers  - List registered schedulers"
+	@echo "  make clean            - Remove generated logs/data"

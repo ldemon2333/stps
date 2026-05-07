@@ -4,7 +4,14 @@ log/
 plot/*.png
 .github/
 __pycache__/
-.vscode/    
+.vscode/
 test.py
 test.sh
 overleaf
+.env
+.claude
+.pytest_cache/
+
+# ImageNet-100 imagery (fetched via script/fetch_imagenet100_val.py)
+dataset/imagenet/
+model/STEP/

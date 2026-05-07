@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
+
+import numpy as np
 
 from .task import Task
 
@@ -84,46 +86,61 @@ class Card:
             self.tasks.remove(task)
         task.host_card_id = -1
 
-    def calculate_load(self, alpha: float, beta: float) -> float:
-        """Compute and cache current load given weights."""
-        total = 0.0
-        for task in self.tasks:
-            total += (alpha * task.current_spike_count) + (beta * task.current_synaptic_ops)
+    def calculate_load(self) -> float:
+        """Sum current fingerprint-driven traffic across resident tasks."""
+        total = sum(task.current_traffic for task in self.tasks)
         self.current_load = total
         return total
 
-    def calculate_comm_load(self) -> float:
-        """
-        Calculate communication load across all tasks on this card.
-        
-        L_comm = Σ_k λ_k × FanOut_k × D_hops(k)
-        where λ_k is the firing rate (spike_count / neuron_count).
-        """
-        comm_load = 0.0
-        for task in self.tasks:
-            firing_rate = task.current_spike_count / max(task.neuron_count, 1)
-            comm_load += firing_rate * task.fan_out * task.avg_hop_distance
-        return comm_load
+    # ------------------------------------------------------------------
+    # STPS forecast-traffic state (paper §4.3, Algorithm 1).
+    # Lazy-allocated: schedulers that don't use phase-shifting never pay for
+    # the extra buffer or the EMA update.
+    # ------------------------------------------------------------------
 
-    def calculate_composite_load(
-        self, alpha: float, beta: float, comm_weight: float = 0.3
-    ) -> float:
+    def ensure_forecast(self, horizon: int) -> None:
+        if not hasattr(self, "_forecast") or self._forecast.shape[0] != horizon:
+            self._forecast = np.zeros(horizon, dtype=np.float32)
+
+    def add_forecast(self, E: np.ndarray, offset: int) -> None:
+        if not hasattr(self, "_forecast"):
+            return
+        H = self._forecast.shape[0]
+        end = min(H, offset + E.shape[0])
+        if end > offset:
+            self._forecast[offset:end] += E[: end - offset].astype(np.float32)
+
+    def peak_forecast(self) -> float:
+        if not hasattr(self, "_forecast"):
+            return 0.0
+        return float(self._forecast.max(initial=0.0))
+
+    def advance_forecast(self) -> None:
+        if not hasattr(self, "_forecast"):
+            return
+        self._forecast[:-1] = self._forecast[1:]
+        self._forecast[-1] = 0.0
+
+    @property
+    def forecast(self) -> Optional[np.ndarray]:
+        return getattr(self, "_forecast", None)
+
+    @property
+    def beta_card(self) -> float:
+        """Running-average burstiness of tasks placed on this card (EMA)."""
+        return float(getattr(self, "_beta_card", 1.0))
+
+    def update_beta_card(self, task_beta: float, ema_alpha: float = 0.3) -> None:
+        prev = self.beta_card
+        self._beta_card = (1.0 - ema_alpha) * prev + ema_alpha * float(task_beta)
+
+    def largest_free_block_ratio(self) -> float:
+        """Approximate fraction of cores that are contiguously free.
+
+        We don't model exact 2D-mesh topology in v1; treat each card's free-core
+        fraction as a proxy for "largest contiguous block".
         """
-        Calculate composite load combining computation and communication.
-        
-        L_node = α·L_comp + β·Sigmoid(L_comm)
-        
-        Args:
-            alpha: Weight for computation load
-            beta: Weight for communication load (applied via sigmoid)
-            comm_weight: Scaling factor for communication component
-            
-        Returns:
-            Composite load value
-        """
-        import math
-        comp_load = self.calculate_load(alpha, beta)
-        comm_load = self.calculate_comm_load()
-        # Sigmoid normalization for communication load
-        sigmoid_comm = 1.0 / (1.0 + math.exp(-comm_load)) if comm_load < 500 else 1.0
-        return comp_load + comm_weight * sigmoid_comm
+        used = sum(t.cores_required for t in self.tasks)
+        free = max(self.cores - used, 0)
+        return float(free) / float(self.cores) if self.cores > 0 else 0.0
+

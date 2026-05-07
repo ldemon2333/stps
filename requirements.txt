@@ -1,0 +1,16 @@
+# Core dependencies
+numpy
+
+# DRL dependencies (GLaSS-DRL)
+torch
+stable-baselines3
+gymnasium
+
+# SpikingResformer fingerprint adapter
+torchvision
+spikingjelly
+timm
+pillow
+
+# ImageNet-100 fetch (script/fetch_imagenet100_val.py)
+datasets
