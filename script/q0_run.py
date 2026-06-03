@@ -17,13 +17,27 @@ import argparse
 import csv
 import logging
 import math
+import os
 import sys
 import tempfile
+
+# Pin BLAS / OpenMP to a single thread per process BEFORE importing numpy so
+# that process-level parallelism (multiprocessing Pool below) does not
+# oversubscribe the cores. Each simulation run is single-threaded; we get our
+# speed-up by running many runs concurrently, one per core.
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
+import multiprocessing as mp
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
+
+# Default worker count for the process pool; overridable via --workers.
+_WORKERS = os.cpu_count() or 1
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -112,6 +126,9 @@ def _run_one(
     cards: int = CARDS,
 ) -> Tuple[Dict, Dict[str, np.ndarray]]:
     bw_cap = 9.0e5  # Phase A BW_CAP_4*; per-card cap, identical for 4-card and 16-card runs.
+    # Unique output prefix so concurrent runs never collide on the byproduct
+    # loads/summary CSV filenames written under data_dir.
+    data_output = f"{scheduler}_{arrival_mode}_c{cards}_t{tasks}_s{seed}"
     metrics = run_simulation(
         scheduler=scheduler,
         cards=cards,
@@ -127,6 +144,7 @@ def _run_one(
         centrality_split_threshold=0.2,
         log_dir="log",
         data_dir="data/q0/_raw",
+        data_output=data_output,
     )
     # Per-task delays (only completed tasks contribute).
     completed = [d for d in metrics.task_delays if d.completion_step >= 0]
@@ -257,6 +275,56 @@ def _aggregate(rows: List[Dict], group_keys: Sequence[str]) -> List[Dict]:
             agg[f"{m}_ci95"] = _ci95(vals)
         out.append(agg)
     return out
+
+
+def _run_one_task(task: Dict) -> Tuple[int, Dict, Dict[str, np.ndarray]]:
+    """Module-level Pool worker: run one simulation and tag the row.
+
+    `task` carries everything `_run_one` needs plus an `idx` (to restore
+    deterministic order), optional `fingerprint_set`, and an `extra` dict of
+    columns to stamp onto the result row.
+    """
+    row, delay = _run_one(
+        task["scheduler"],
+        task["seed"],
+        task["tasks"],
+        task["arrival_mode"],
+        task["fp_dir"],
+        cards=task.get("cards", CARDS),
+    )
+    row["fingerprint_set"] = task.get("fingerprint_set", "mixed")
+    for k, v in task.get("extra", {}).items():
+        row[k] = v
+    print(
+        f"  done: {task['scheduler']:10s} arrival={task['arrival_mode']:7s} "
+        f"cards={task.get('cards', CARDS):2d} tasks={task['tasks']} "
+        f"seed={task['seed']}",
+        flush=True,
+    )
+    return task["idx"], row, delay
+
+
+def _dispatch(tasks: List[Dict], workers: int) -> List[Tuple[Dict, Dict[str, np.ndarray]]]:
+    """Run `tasks` across a fork-based process pool, preserving input order.
+
+    Returns a list aligned with `tasks`, each entry `(row, delay_dict)`.
+    """
+    for i, t in enumerate(tasks):
+        t["idx"] = i
+    results: List = [None] * len(tasks)
+    n_workers = max(1, min(workers, len(tasks)))
+    if n_workers == 1:
+        for t in tasks:
+            idx, row, delay = _run_one_task(t)
+            results[idx] = (row, delay)
+        return results
+    ctx = mp.get_context("fork")
+    # maxtasksperchild=1 → each run gets a fresh process, so the per-run
+    # random/np.random seeding inside run_simulation cannot leak across runs.
+    with ctx.Pool(processes=n_workers, maxtasksperchild=1) as pool:
+        for idx, row, delay in pool.imap_unordered(_run_one_task, tasks):
+            results[idx] = (row, delay)
+    return results
 
 
 def _build_synthetic_fp_dir(parent: Path) -> str:
@@ -439,14 +507,13 @@ def plot_long_tail(
 def run_main(out_dir: Path, fp_dir: str) -> List[Dict]:
     print(f"[Q0.main] {len(SCHEDULERS)} schedulers x {len(SEEDS)} seeds, "
           f"cards={CARDS}, tasks={DEFAULT_TASKS}, steps={STEPS}, "
-          f"arrival=bursty, fp=mixed, bw_cap=9e5, d_max=2")
-    rows = []
-    for sched in SCHEDULERS:
-        for seed in SEEDS:
-            print(f"  - {sched:10s} seed={seed} ...", flush=True)
-            row, _ = _run_one(sched, seed, DEFAULT_TASKS, "bursty", fp_dir)
-            row["fingerprint_set"] = "mixed"
-            rows.append(row)
+          f"arrival=bursty, fp=mixed, bw_cap=9e5, d_max=2 | workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": DEFAULT_TASKS,
+         "arrival_mode": "bursty", "fp_dir": fp_dir, "cards": CARDS}
+        for sched in SCHEDULERS for seed in SEEDS
+    ]
+    rows = [row for row, _ in _dispatch(tasks, _WORKERS)]
     _write_csv(out_dir / "main_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler"])
     _write_csv(out_dir / "main_summary.csv", summary)
@@ -456,15 +523,14 @@ def run_main(out_dir: Path, fp_dir: str) -> List[Dict]:
 def run_arrival(out_dir: Path, fp_dir: str) -> List[Dict]:
     modes = ["poisson", "bursty", "mixed"]
     print(f"[Q0.arrival] {len(SCHEDULERS)} schedulers x {len(modes)} modes x "
-          f"{len(SEEDS)} seeds, cards={CARDS}, tasks={DEFAULT_TASKS}, fp=mixed")
-    rows = []
-    for sched in SCHEDULERS:
-        for mode in modes:
-            for seed in SEEDS:
-                print(f"  - {sched:10s} arrival={mode:7s} seed={seed} ...", flush=True)
-                row, _ = _run_one(sched, seed, DEFAULT_TASKS, mode, fp_dir)
-                row["fingerprint_set"] = "mixed"
-                rows.append(row)
+          f"{len(SEEDS)} seeds, cards={CARDS}, tasks={DEFAULT_TASKS}, fp=mixed "
+          f"| workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": DEFAULT_TASKS,
+         "arrival_mode": mode, "fp_dir": fp_dir, "cards": CARDS}
+        for sched in SCHEDULERS for mode in modes for seed in SEEDS
+    ]
+    rows = [row for row, _ in _dispatch(tasks, _WORKERS)]
     _write_csv(out_dir / "arrival_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler", "arrival_mode"])
     _write_csv(out_dir / "arrival_summary.csv", summary)
@@ -474,15 +540,16 @@ def run_arrival(out_dir: Path, fp_dir: str) -> List[Dict]:
 def run_sweep(out_dir: Path, fp_dir: str) -> List[Dict]:
     util_to_tasks = {0.30: 320, 0.50: 560, 0.70: 800, 0.85: 1020, 0.95: 1100}
     print(f"[Q0.sweep] {len(SCHEDULERS)} schedulers x {len(util_to_tasks)} util x "
-          f"{len(SEEDS)} seeds, arrival=bursty")
-    rows = []
-    for sched in SCHEDULERS:
-        for util, tasks in util_to_tasks.items():
-            for seed in SEEDS:
-                print(f"  - {sched:10s} util={util:.2f} seed={seed} ...", flush=True)
-                row, _ = _run_one(sched, seed, tasks, "bursty", fp_dir)
-                row["utilization"] = util
-                rows.append(row)
+          f"{len(SEEDS)} seeds, arrival=bursty | workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": tasks_n,
+         "arrival_mode": "bursty", "fp_dir": fp_dir, "cards": CARDS,
+         "extra": {"utilization": util}}
+        for sched in SCHEDULERS
+        for util, tasks_n in util_to_tasks.items()
+        for seed in SEEDS
+    ]
+    rows = [row for row, _ in _dispatch(tasks, _WORKERS)]
     _write_csv(out_dir / "sweep_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler", "utilization"])
     _write_csv(out_dir / "sweep_summary.csv", summary)
@@ -490,49 +557,46 @@ def run_sweep(out_dir: Path, fp_dir: str) -> List[Dict]:
 
 
 def run_scale16(out_dir: Path, fp_dir: str) -> List[Dict]:
-    modes = ["poisson", "bursty"]
+    modes = ["poisson", "bursty", "mixed"]
     print(f"[Q0.scale16] {len(SCHEDULERS)} schedulers x {len(modes)} modes x "
           f"{len(SEEDS)} seeds, cards={SCALE16_CARDS}, tasks={SCALE16_TASKS}, "
-          f"steps={STEPS}, fp=mixed")
-    rows = []
+          f"steps={STEPS}, fp=mixed | workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": SCALE16_TASKS,
+         "arrival_mode": mode, "fp_dir": fp_dir, "cards": SCALE16_CARDS}
+        for sched in SCHEDULERS for mode in modes for seed in SEEDS
+    ]
+    results = _dispatch(tasks, _WORKERS)
+    rows: List[Dict] = []
     delay_rows: List[Dict] = []
-    for sched in SCHEDULERS:
-        for mode in modes:
-            for seed in SEEDS:
-                print(f"  - {sched:10s} arrival={mode:7s} seed={seed} ...", flush=True)
-                row, delay_dict = _run_one(
-                    sched,
-                    seed,
-                    SCALE16_TASKS,
-                    mode,
-                    fp_dir,
-                    cards=SCALE16_CARDS,
-                )
-                row["fingerprint_set"] = "mixed"
-                rows.append(row)
-                # Long-tail uses original total_delay (cold-start included),
-                # per user spec: p99/tail accounting keeps the wall-clock view.
-                delays = delay_dict["delay"]
-                eff_delays = delay_dict["delay_excl_cold"]
-                cold_starts = delay_dict["cold_start"]
-                p99 = float(np.percentile(delays, 99)) if delays.size else 0.0
-                # Keep the per-task dump aligned across all three columns.
-                for d, ed, cs in zip(
-                    delays.tolist(), eff_delays.tolist(), cold_starts.tolist()
-                ):
-                    delay_rows.append({
-                        "scheduler": sched,
-                        "arrival_mode": mode,
-                        "seed": seed,
-                        "delay": int(d),
-                        "delay_excl_cold": int(ed),
-                        "cold_start": int(cs),
-                        "p99_delay_run": p99,
-                    })
+    for task, (row, delay_dict) in zip(tasks, results):
+        rows.append(row)
+        # Long-tail uses original total_delay (cold-start included),
+        # per user spec: p99/tail accounting keeps the wall-clock view.
+        delays = delay_dict["delay"]
+        eff_delays = delay_dict["delay_excl_cold"]
+        cold_starts = delay_dict["cold_start"]
+        p99 = float(np.percentile(delays, 99)) if delays.size else 0.0
+        for d, ed, cs in zip(
+            delays.tolist(), eff_delays.tolist(), cold_starts.tolist()
+        ):
+            delay_rows.append({
+                "scheduler": task["scheduler"],
+                "arrival_mode": task["arrival_mode"],
+                "seed": task["seed"],
+                "delay": int(d),
+                "delay_excl_cold": int(ed),
+                "cold_start": int(cs),
+                "p99_delay_run": p99,
+            })
     _write_csv(out_dir / "scale16_raw.csv", rows)
     _write_csv(out_dir / "scale16_task_delays.csv", delay_rows)
     summary = _aggregate(rows, ["fingerprint_set", "arrival_mode", "scheduler"])
     _write_csv(out_dir / "scale16_summary.csv", summary)
+    # Also emit the 16-card x Mixed subset on its own (SNN schedule/TODO.md §2)
+    # without overwriting the combined scale16 summary.
+    mixed_summary = [r for r in summary if r.get("arrival_mode") == "mixed"]
+    _write_csv(out_dir / "scale16_mixed_summary.csv", mixed_summary)
     # Long-tail figures stay on the original total_delay (user spec: long-tail
     # analysis keeps the cold-start ticks; only throughput / exec-time metrics
     # have the cold-start-excluded view).
@@ -634,14 +698,14 @@ def run_la_main(out_dir: Path, fp_dir: str) -> List[Dict]:
     """
     schedulers = ["bestfit", "stps", "stps-la"]
     print(f"[Q0.la-main] {len(schedulers)} schedulers x {len(SEEDS)} seeds, "
-          f"cards={CARDS}, tasks={DEFAULT_TASKS}, steps={STEPS}, arrival=bursty, fp=mixed")
-    rows = []
-    for sched in schedulers:
-        for seed in SEEDS:
-            print(f"  - {sched:10s} seed={seed} ...", flush=True)
-            row, _ = _run_one(sched, seed, DEFAULT_TASKS, "bursty", fp_dir)
-            row["fingerprint_set"] = "mixed"
-            rows.append(row)
+          f"cards={CARDS}, tasks={DEFAULT_TASKS}, steps={STEPS}, arrival=bursty, "
+          f"fp=mixed | workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": DEFAULT_TASKS,
+         "arrival_mode": "bursty", "fp_dir": fp_dir, "cards": CARDS}
+        for sched in schedulers for seed in SEEDS
+    ]
+    rows = [row for row, _ in _dispatch(tasks, _WORKERS)]
     _write_csv(out_dir / "la_main_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler"])
     _write_csv(out_dir / "la_main_summary.csv", summary)
@@ -652,34 +716,34 @@ def run_la_scale16(out_dir: Path, fp_dir: str) -> List[Dict]:
     schedulers = ["bestfit", "stps", "stps-la"]
     modes = ["poisson", "bursty"]
     print(f"[Q0.la-scale16] {len(schedulers)} schedulers x {len(modes)} modes x "
-          f"{len(SEEDS)} seeds, cards={SCALE16_CARDS}, tasks={SCALE16_TASKS}, fp=mixed")
-    rows = []
+          f"{len(SEEDS)} seeds, cards={SCALE16_CARDS}, tasks={SCALE16_TASKS}, "
+          f"fp=mixed | workers={_WORKERS}")
+    tasks = [
+        {"scheduler": sched, "seed": seed, "tasks": SCALE16_TASKS,
+         "arrival_mode": mode, "fp_dir": fp_dir, "cards": SCALE16_CARDS}
+        for sched in schedulers for mode in modes for seed in SEEDS
+    ]
+    results = _dispatch(tasks, _WORKERS)
+    rows: List[Dict] = []
     delay_rows: List[Dict] = []
-    for sched in schedulers:
-        for mode in modes:
-            for seed in SEEDS:
-                print(f"  - {sched:10s} arrival={mode:7s} seed={seed} ...", flush=True)
-                row, delay_dict = _run_one(
-                    sched, seed, SCALE16_TASKS, mode, fp_dir, cards=SCALE16_CARDS,
-                )
-                row["fingerprint_set"] = "mixed"
-                rows.append(row)
-                delays = delay_dict["delay"]
-                eff_delays = delay_dict["delay_excl_cold"]
-                cold_starts = delay_dict["cold_start"]
-                p99 = float(np.percentile(delays, 99)) if delays.size else 0.0
-                for d, ed, cs in zip(
-                    delays.tolist(), eff_delays.tolist(), cold_starts.tolist()
-                ):
-                    delay_rows.append({
-                        "scheduler": sched,
-                        "arrival_mode": mode,
-                        "seed": seed,
-                        "delay": int(d),
-                        "delay_excl_cold": int(ed),
-                        "cold_start": int(cs),
-                        "p99_delay_run": p99,
-                    })
+    for task, (row, delay_dict) in zip(tasks, results):
+        rows.append(row)
+        delays = delay_dict["delay"]
+        eff_delays = delay_dict["delay_excl_cold"]
+        cold_starts = delay_dict["cold_start"]
+        p99 = float(np.percentile(delays, 99)) if delays.size else 0.0
+        for d, ed, cs in zip(
+            delays.tolist(), eff_delays.tolist(), cold_starts.tolist()
+        ):
+            delay_rows.append({
+                "scheduler": task["scheduler"],
+                "arrival_mode": task["arrival_mode"],
+                "seed": task["seed"],
+                "delay": int(d),
+                "delay_excl_cold": int(ed),
+                "cold_start": int(cs),
+                "p99_delay_run": p99,
+            })
     _write_csv(out_dir / "la_scale16_raw.csv", rows)
     _write_csv(out_dir / "la_scale16_task_delays.csv", delay_rows)
     summary = _aggregate(rows, ["fingerprint_set", "arrival_mode", "scheduler"])
@@ -694,10 +758,19 @@ def run_la_scale16(out_dir: Path, fp_dir: str) -> List[Dict]:
 
 
 def main() -> int:
+    global _WORKERS
     ap = argparse.ArgumentParser()
     ap.add_argument("experiment", choices=["main", "arrival", "sweep", "scale16", "all", "la-main", "la-scale16", "la-all"])
     ap.add_argument("--out-dir", default="data/q0")
+    ap.add_argument(
+        "--workers", type=int, default=_WORKERS,
+        help="process-pool size for parallel runs (default: all CPU cores)",
+    )
     args = ap.parse_args()
+
+    _WORKERS = max(1, args.workers)
+    print(f"[Q0] parallel workers = {_WORKERS} (CPU cores = {os.cpu_count()})",
+          flush=True)
 
     out_dir = Path(args.out_dir)
     with tempfile.TemporaryDirectory(prefix="q0_fp_") as tmp:
