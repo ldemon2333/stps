@@ -1,0 +1,21 @@
+\begin{table}[h!]
+  \centering
+  % Use a smaller font size for the table
+  \small
+  % Optional: reduce the space between columns
+  \setlength{\tabcolsep}{4pt}
+  \caption{SNN Task Workload Profiles.U(a, b) denotes a uniform random distribution. k = 1,000.}
+  \label{tab:workload_spec}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    % Abbreviated headers to save horizontal space
+    \textbf{Profile} & \textbf{Cores} & \textbf{Synapses} & \textbf{Mem} & \textbf{BW} \\
+     & & & \textbf{(GB)} & \textbf{(KEPS)} \\
+    \midrule
+    Compute-Heavy    & 256            & 20000           & 16.0        & 50   \\
+    Memory-Heavy     & 64             & 5000           & 32.0        & 50     \\
+    Bandwidth-Heavy  & 64             & 5000            & 16         & 100    \\
+    Mixed            & U(64,256)      & U(5000,20000)        & U(16,32)      & U(50,100) \\
+    \bottomrule
+  \end{tabular}%
+\end{table}

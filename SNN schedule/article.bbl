@@ -1,0 +1,131 @@
+\begin{thebibliography}{10}
+
+\bibitem{davies2018loihi}
+Mike Davies, Narayan Srinivasa, Tsung-Han Lin, Gautham Chinya, Yongqiang Cao,
+  Sri~Harsha Choday, Georgios Dimou, Prasad Joshi, Nabil Imam, Shweta Jain,
+  et~al.
+\newblock Loihi: A neuromorphic manycore processor with on-chip learning.
+\newblock {\em IEEE Micro}, 38(1):82--99, 2018.
+
+\bibitem{fang2023spikingjelly}
+Wei Fang, Yanqi Chen, Jianhao Ding, Zhaofei Yu, Timoth{\'e}e Masquelier, Ding
+  Chen, Liwei Huang, Huihui Zhou, Guoqi Li, and Yonghong Tian.
+\newblock Spikingjelly: An open-source machine learning infrastructure platform
+  for spike-based intelligence.
+\newblock {\em Science Advances}, 9(40):eadi1480, 2023.
+
+\bibitem{ghodsi2011dominant}
+Ali Ghodsi, Matei Zaharia, Benjamin Hindman, Andy Konwinski, Scott Shenker, and
+  Ion Stoica.
+\newblock Dominant resource fairness: Fair allocation of multiple resource
+  types.
+\newblock In {\em 8th USENIX symposium on networked systems design and
+  implementation (NSDI 11)}, 2011.
+
+\bibitem{grandl2014multi}
+Robert Grandl, Ganesh Ananthanarayanan, Srikanth Kandula, Sriram Rao, and
+  Aditya Akella.
+\newblock Multi-resource packing for cluster schedulers.
+\newblock {\em ACM SIGCOMM Computer Communication Review}, 44(4):455--466,
+  2014.
+
+\bibitem{gujarati2020clockwork}
+Arpan Gujarati, Reza Karimi, Safya Alzayat, Wei Hao, Antoine Kaufmann, Ymir
+  Vigfusson, and Jonathan Mace.
+\newblock Serving {DNN}s like clockwork: Performance predictability from the
+  bottom up.
+\newblock In {\em 14th USENIX Symposium on Operating Systems Design and
+  Implementation (OSDI 20)}, pages 443--462, 2020.
+
+\bibitem{jain1984quantitative}
+Rajendra~K Jain, Dah-Ming~W Chiu, William~R Hawe, et~al.
+\newblock A quantitative measure of fairness and discrimination.
+\newblock {\em Eastern Research Laboratory, Digital Equipment Corporation,
+  Hudson, MA}, 21(1):2022--2023, 1984.
+
+\bibitem{lee2011validating}
+Sangmin Lee, Rina Panigrahy, Vijayan Prabhakaran, Venugopalan Ramasubramanian,
+  Kunal Talwar, Lincoln Uyeda, and Udi Wieder.
+\newblock Validating heuristics for virtual machines consolidation.
+\newblock {\em Microsoft Research, MSR-TR-2011-9}, pages 1--14, 2011.
+
+\bibitem{ma2024darwin3}
+De~Ma, Xiaofei Jin, Shichun Sun, Yitao Li, Xundong Wu, Youneng Hu, Fangchao
+  Yang, Huajin Tang, Xiaolei Zhu, Peng Lin, and Gang Pan.
+\newblock Darwin3: A large-scale neuromorphic chip with a novel isa and on-chip
+  learning.
+\newblock {\em National Science Review}, 2024.
+
+\bibitem{mayr2019spinnaker2}
+Christian Mayr, Sebastian H{\"o}ppner, and Steve Furber.
+\newblock Spinnaker 2: A 10 million core processor system for brain simulation
+  and machine learning.
+\newblock {\em arXiv preprint arXiv:1911.02385}, 2019.
+
+\bibitem{merolla2014truenorth}
+Paul~A Merolla, John~V Arthur, Rodrigo Alvarez-Icaza, Andrew~S Cassidy, Jun
+  Sawada, Filipp Akopyan, Bryan~L Jackson, Nabil Imam, Chen Guo, Yutaka
+  Nakamura, et~al.
+\newblock A million spiking-neuron integrated circuit with a scalable
+  communication network and interface.
+\newblock {\em Science}, 345(6197):668--673, 2014.
+
+\bibitem{mohan2022looking}
+Jayashree Mohan, Amar Phanishayee, Janardhan Kulkarni, and Vijay Chidambaram.
+\newblock Looking beyond $\{$GPUs$\}$ for $\{$DNN$\}$ scheduling on
+  $\{$Multi-Tenant$\}$ clusters.
+\newblock In {\em 16th USENIX Symposium on Operating Systems Design and
+  Implementation (OSDI 22)}, pages 579--596, 2022.
+
+\bibitem{narayanan2020heterogeneity}
+Deepak Narayanan, Keshav Santhanam, Fiodar Kazhamiaka, Amar Phanishayee, and
+  Matei Zaharia.
+\newblock $\{$Heterogeneity-Aware$\}$ cluster scheduling policies for deep
+  learning workloads.
+\newblock In {\em 14th USENIX Symposium on Operating Systems Design and
+  Implementation (OSDI 20)}, pages 481--498, 2020.
+
+\bibitem{orchard2021loihi2}
+Garrick Orchard, E.~Paxon Frady, Daniel Ben~Dayan Rubin, Sophia Sanborn,
+  Sumit~Bam Shrestha, Friedrich~T. Sommer, and Mike Davies.
+\newblock Efficient neuromorphic signal processing with loihi 2.
+\newblock In {\em IEEE Workshop on Signal Processing Systems (SiPS)}, 2021.
+
+\bibitem{panigrahy2011heuristics}
+Rina Panigrahy, Kunal Talwar, Lincoln Uyeda, and Udi Wieder.
+\newblock Heuristics for vector bin packing.
+\newblock {\em research. microsoft. com}, 2011.
+
+\bibitem{288610}
+Sultan~Mahmud Sajal, Luke Marshall, Beibin Li, Shandan Zhou, Abhisek Pan,
+  Konstantina Mellou, Deepak Narayanan, Timothy Zhu, David Dion, Thomas
+  Moscibroda, and Ishai Menache.
+\newblock Kerveros: Efficient and scalable cloud admission control.
+\newblock In {\em 17th USENIX Symposium on Operating Systems Design and
+  Implementation (OSDI 23)}, pages 227--245, Boston, MA, July 2023. USENIX
+  Association.
+
+\bibitem{weng2023beware}
+Qizhen Weng, Lingyun Yang, Yinghao Yu, Wei Wang, Xiaochuan Tang, Guodong Yang,
+  and Liping Zhang.
+\newblock Beware of fragmentation: Scheduling $\{$GPU-Sharing$\}$ workloads
+  with fragmentation gradient descent.
+\newblock In {\em 2023 USENIX Annual Technical Conference (USENIX ATC 23)},
+  pages 995--1008, 2023.
+
+\bibitem{xiao2018gandiva}
+Wencong Xiao, Romil Bhardwaj, Ramachandran Ramjee, Muthian Sivathanu, Nipun
+  Kwatra, Zhenhua Han, Pratyush Patel, Xuan Peng, Hanyu Zhao, Quanlu Zhang,
+  et~al.
+\newblock Gandiva: Introspective cluster scheduling for deep learning.
+\newblock In {\em 13th USENIX Symposium on Operating Systems Design and
+  Implementation (OSDI 18)}, pages 595--610, 2018.
+
+\bibitem{zhou2023spikformer}
+Zhaokun Zhou, Yuesheng Zhu, Chao He, Yaowei Wang, Shuicheng Yan, Yonghong Tian,
+  and Li~Yuan.
+\newblock Spikformer: When spiking neural network meets transformer.
+\newblock In {\em International Conference on Learning Representations (ICLR)},
+  2023.
+
+\end{thebibliography}

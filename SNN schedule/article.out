@@ -1,0 +1,28 @@
+\BOOKMARK [1][-]{section.1}{Introduction}{}% 1
+\BOOKMARK [1][-]{section.2}{Background and Motivation}{}% 2
+\BOOKMARK [2][-]{subsection.2.1}{SNN Execution on CIM Clusters}{section.2}% 3
+\BOOKMARK [2][-]{subsection.2.2}{Why Capacity-Based Scheduling Fails}{section.2}% 4
+\BOOKMARK [2][-]{subsection.2.3}{Why Schedule-Every-Spike Fails}{section.2}% 5
+\BOOKMARK [2][-]{subsection.2.4}{The Missing Middle}{section.2}% 6
+\BOOKMARK [1][-]{section.3}{Related Work}{}% 7
+\BOOKMARK [1][-]{section.4}{Preliminaries}{}% 8
+\BOOKMARK [2][-]{subsection.4.1}{Workload Model}{section.4}% 9
+\BOOKMARK [2][-]{subsection.4.2}{Cluster Model}{section.4}% 10
+\BOOKMARK [2][-]{subsection.4.3}{Scheduling Problem}{section.4}% 11
+\BOOKMARK [1][-]{section.5}{System Design}{}% 12
+\BOOKMARK [2][-]{subsection.5.1}{Overview}{section.5}% 13
+\BOOKMARK [2][-]{subsection.5.2}{Workload Fingerprint}{section.5}% 14
+\BOOKMARK [2][-]{subsection.5.3}{Online Scheduler}{section.5}% 15
+\BOOKMARK [3][-]{subsubsection.5.3.1}{Stage 1: Macro-Card Dispatch}{subsection.5.3}% 16
+\BOOKMARK [3][-]{subsubsection.5.3.2}{Stage 2: Temporal Phase-Shifting}{subsection.5.3}% 17
+\BOOKMARK [2][-]{subsection.5.4}{Spatial Mapping and Hotspot Indicator}{section.5}% 18
+\BOOKMARK [2][-]{subsection.5.5}{Discussion}{section.5}% 19
+\BOOKMARK [1][-]{section.6}{Implementation}{}% 20
+\BOOKMARK [1][-]{section.7}{Evaluation}{}% 21
+\BOOKMARK [2][-]{subsection.7.1}{Experimental Setup}{section.7}% 22
+\BOOKMARK [2][-]{subsection.7.2}{RQ1: Congestion-Bounded End-to-end Behaviour}{section.7}% 23
+\BOOKMARK [2][-]{subsection.7.3}{RQ2: Which Stage Contributes What}{section.7}% 24
+\BOOKMARK [2][-]{subsection.7.4}{RQ3: When STPS Helps and When It Hurts}{section.7}% 25
+\BOOKMARK [2][-]{subsection.7.5}{RQ4: The Tail Cost of Holding Load Flat}{section.7}% 26
+\BOOKMARK [1][-]{section.8}{Conclusion}{}% 27
+\BOOKMARK [1][-]{appendix.A}{Cross-Regime Cap-Binding Study}{}% 28

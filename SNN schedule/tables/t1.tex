@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{Comparison of Load Balancing Performance under Poisson Workload (Mean $\pm$ Std) Under Card = 4, tasks = 128, steps = 128, mode = poisson}
+\label{tab:poisson_perf}
+\resizebox{\columnwidth}{!}{% 自适应单栏宽度
+\begin{tabular}{lccc}
+\toprule
+\textbf{Algorithm} & \textbf{CV} ($\downarrow$) & \textbf{JFI} ($\uparrow$) & \textbf{LIF} ($\downarrow$) \\ 
+\midrule
+\textbf{GLaSS-Greedy} & \textbf{0.4832} $\pm$ 0.047 & 0.8096 $\pm$ 0.023 & 1.6900 $\pm$ 0.080 \\
+GLaSS & \textbf{0.4534} $\pm$ 0.047 & \textbf{0.8239} $\pm$ 0.023 & \textbf{1.6313} $\pm$ 0.080 \\
+BestFit & 0.5108 $\pm$ 0.022 & 0.7953 $\pm$ 0.012 & 1.7343 $\pm$ 0.039 \\
+DRF & 0.4883 $\pm$ 0.033 & 0.8061 $\pm$ 0.018 & 1.7001 $\pm$ 0.051 \\
+Round-Robin & 0.5671 $\pm$ 0.033 & 0.7605 $\pm$ 0.018 & 1.8126 $\pm$ 0.063 \\
+P2C & 0.7204 $\pm$ 0.032 & 0.6736 $\pm$ 0.018 & 2.0268 $\pm$ 0.057 \\ 
+\bottomrule
+\end{tabular}%
+}
+\vspace{1ex} \\
+{\footnotesize $\downarrow$: Lower is better. $\uparrow$: Higher is better. Best results are bolded.}
+\end{table}

@@ -25,12 +25,10 @@ class DRF(BaseScheduler):
         return "DRF"
 
     def _get_dominant_utilization(self, card: "Card", task: "Task") -> float:
-        used_cores = sum(t.cores_required for t in card.tasks) + task.cores_required
-        used_synapses = sum(t.synapses_required for t in card.tasks) + task.synapses_required
+        used_neurons = sum(t.neuron_count for t in card.tasks) + task.neuron_count
         used_memory = sum(t.memory_gb_required for t in card.tasks) + task.memory_gb_required
         return max(
-            used_cores / card.cores if card.cores > 0 else 0.0,
-            used_synapses / card.synapses if card.synapses > 0 else 0.0,
+            used_neurons / card.neuron_capacity if card.neuron_capacity > 0 else 0.0,
             used_memory / card.memory_gb if card.memory_gb > 0 else 0.0,
         )
 

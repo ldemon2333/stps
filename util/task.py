@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
-from fingerprint import Fingerprint
+from fingerprint import Fingerprint, effective_traffic_trace
 
 
 @dataclass
@@ -28,6 +28,15 @@ class Task:
     fingerprint: Optional["Fingerprint"] = None
     start_offset: int = 0
     split_plan: List[int] = field(default_factory=list)
+    rejected: bool = False
+    reject_reason: str = ""
+
+    # docs/traffic_optim.md §A.1: bandwidth-contention bookkeeping.
+    # pending_traffic = current trace quantum not yet fully served on the NoC;
+    # while > 0, tick_index / duration_steps must not advance.
+    pending_traffic: float = 0.0
+    blocked_ticks: int = 0
+    congestion_wait_ticks: int = 0
 
     def __post_init__(self) -> None:
         self.cores_required = max(1, int((self.neuron_count / 64) * self.complexity_ratio))
@@ -38,17 +47,36 @@ class Task:
         state_gb = self.state_size_mb / 1024.0
         self.memory_gb_required = round(max(state_gb * (1 + 0.25 * self.complexity_ratio), 0.01), 4)
 
-    def simulate_tick(self) -> None:
-        """Sample the fingerprint traffic timeline at the current active-tick index.
+    def next_trace_quantum(self) -> float:
+        """Read (without advancing) the next-quantum demand from the trace.
 
-        E describes one finite inference pass of length T; once exhausted the task
-        emits no further traffic (no cyclic replay).
+        Bandwidth-contention path: engine pulls the quantum, applies the per-card
+        bw_cap, then advances tick_index only if the quantum is fully served.
+        Returns 0.0 once the trace is exhausted.
+        """
+        fp = self.fingerprint
+        assert fp is not None, "next_trace_quantum requires a loaded fingerprint"
+        trace = effective_traffic_trace(fp)
+        idx = self.tick_index
+        if idx < int(trace.shape[0]):
+            return float(trace[idx])
+        return 0.0
+
+    def advance_trace_tick(self) -> None:
+        self.tick_index += 1
+
+    def simulate_tick(self) -> None:
+        """Legacy single-quantum-per-tick path (no bandwidth contention).
+
+        Kept for backwards compatibility with code that has not migrated to the
+        engine-driven contention loop.
         """
         self.tick_index += 1
         fp = self.fingerprint
         assert fp is not None, "simulate_tick requires a loaded fingerprint"
+        trace = effective_traffic_trace(fp)
         idx = self.tick_index - 1
-        if idx < int(fp.T):
-            self.current_traffic = float(fp.traffic_sequence[idx])
+        if idx < int(trace.shape[0]):
+            self.current_traffic = float(trace[idx])
         else:
             self.current_traffic = 0.0

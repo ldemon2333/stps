@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 
 from fingerprint import (
+    Fingerprint,
     extract_fingerprint_from_W,
+    extract_fingerprint_from_spikes,
     load_fingerprint,
     mask_conv2d,
     mask_identity,
@@ -13,6 +15,7 @@ from fingerprint import (
     save_fingerprint,
     split_layer,
 )
+from fingerprint.dtdg import DTDGBuilder
 from fingerprint.edge_builder import EdgeSpec, HaloEdgeSpec, build_edge_tensor
 
 
@@ -180,3 +183,79 @@ def test_save_load_save_round_trip_preserves_schema_values(tmp_path):
     assert loaded_again.global_burstiness == pytest.approx(fp.global_burstiness)
     assert loaded_again.mean_components == pytest.approx(fp.mean_components)
     assert loaded_again.meta == fp.meta
+
+
+def test_extract_fingerprint_from_spikes_matches_contract():
+    E = np.array([1.0, 5.0, 2.0, 0.0], dtype=np.float32)
+    fp = extract_fingerprint_from_spikes(
+        E, neuron_count=8, state_size_mb=2.0, complexity_ratio=1.0,
+        meta={"source": "unit-test"},
+    )
+    np.testing.assert_array_equal(fp.traffic_sequence, E)
+    assert fp.traffic_sequence.dtype == np.float32
+    assert fp.traffic_sequence.shape == (4,)
+    assert fp.T == 4
+    assert fp.neuron_count == 8
+    assert fp.global_burstiness == pytest.approx(5.0 / E.mean())
+    assert fp.mean_components == pytest.approx(1.0)
+    np.testing.assert_allclose(fp.max_centrality, np.full(8, 1.0 / 8, dtype=np.float32))
+    assert fp.compute_sequence.shape == (4,)
+    np.testing.assert_array_equal(fp.compute_sequence, np.zeros(4, dtype=np.float32))
+    assert fp.meta == {"source": "unit-test"}
+
+
+def test_extract_fingerprint_from_spikes_handles_all_zero_input():
+    fp = extract_fingerprint_from_spikes(
+        np.zeros(3, dtype=np.float32), neuron_count=4, state_size_mb=1.0,
+    )
+    assert fp.global_burstiness == pytest.approx(1.0)
+    assert fp.T == 3
+    np.testing.assert_array_equal(fp.traffic_sequence, np.zeros(3, dtype=np.float32))
+
+
+def test_spike_timeline_rejects_non_1d_input_and_invalid_neuron_count():
+    with pytest.raises(ValueError, match="E must be a 1D"):
+        extract_fingerprint_from_spikes(
+            np.ones((2, 2), dtype=np.float32), neuron_count=4, state_size_mb=1.0,
+        )
+
+    with pytest.raises(ValueError, match="neuron_count must be positive"):
+        extract_fingerprint_from_spikes(
+            np.ones(2, dtype=np.float32), neuron_count=0, state_size_mb=1.0,
+        )
+
+
+def test_spikingjelly_spike_count_timeline_uses_sample_mean_for_uneven_batches():
+    torch = pytest.importorskip("torch")
+
+    class DummySpikeNode(torch.nn.Module):
+        def forward(self, x):
+            # x is already a multi-step spike trace with shape (T, B, neurons).
+            return x
+
+    net = torch.nn.Sequential(DummySpikeNode())
+    batch1 = torch.tensor(
+        [
+            [[1.0, 0.0], [1.0, 1.0]],
+            [[0.0, 1.0], [1.0, 1.0]],
+            [[0.0, 0.0], [1.0, 0.0]],
+        ]
+    )
+    batch2 = torch.tensor(
+        [
+            [[10.0, 0.0]],
+            [[0.0, 0.0]],
+            [[0.0, 5.0]],
+        ]
+    )
+
+    E = DTDGBuilder.spike_count_timeline_from_spikingjelly(
+        net, [(batch1,), (batch2,)], T=3, batches=2,
+    )
+
+    # Per-sample totals are [1,2,10], [1,2,0], [0,1,5].
+    # The correct denominator is total samples=3, not number of batches=2.
+    np.testing.assert_allclose(
+        E,
+        np.array([13.0 / 3.0, 1.0, 2.0], dtype=np.float32),
+    )

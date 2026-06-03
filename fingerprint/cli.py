@@ -38,6 +38,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--neuron-count", type=int, default=512)
     p.add_argument("--state-size-mb", type=float, default=12.0)
     p.add_argument("--complexity-ratio", type=float, default=1.0)
+    p.add_argument("--e-mean", type=float, default=1.0,
+                   help="Rescale E so E.mean() == this value (spikes/tick)")
     p.add_argument("--seed", type=int, default=None)
     return p.parse_args(argv)
 
@@ -54,8 +56,10 @@ def main(argv=None) -> int:
         neuron_count=args.neuron_count,
         state_size_mb=args.state_size_mb,
         complexity_ratio=args.complexity_ratio,
+        e_mean=args.e_mean,
         seed=args.seed,
-        meta={"source": "synthetic", "beta_target": str(args.beta), "K": str(args.K)},
+        meta={"source": "synthetic", "beta_target": str(args.beta),
+              "K": str(args.K), "e_mean": str(args.e_mean)},
     )
 
     save_fingerprint(args.out, fp)

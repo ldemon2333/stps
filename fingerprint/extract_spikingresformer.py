@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import Fingerprint, extract_fingerprint_from_W, save_fingerprint
+from . import Fingerprint, extract_fingerprint_from_spikes, save_fingerprint
 from .dtdg import DTDGBuilder
 
 VARIANTS = ("ti", "s", "m", "l", "dvsg", "cifar")
@@ -121,7 +121,6 @@ def extract(
     checkpoint: str | None,
     data_dir: Path | None,
     num_batches: int,
-    N_core_cap: int,
 ) -> Fingerprint:
     net = build_network(variant, dataset, T, img_size)
     if checkpoint:
@@ -134,16 +133,15 @@ def extract(
         loader = make_dummy_loader(batch_size, img_size, in_channels)
         used_batches = 1
 
-    W = DTDGBuilder.from_spikingjelly(
-        net, loader, T=T, batches=used_batches, N_core_cap=N_core_cap,
+    E = DTDGBuilder.spike_count_timeline_from_spikingjelly(
+        net, loader, T=T, batches=used_batches,
     )
 
     state_size_mb = sum(p.numel() * p.element_size() for p in net.parameters()) / 1e6
-    V_prime = int(W.shape[1])
-    fp_core = extract_fingerprint_from_W(
-        W, neuron_count=V_prime,
-        state_size_mb=state_size_mb, complexity_ratio=1.0,
-    )
+    # Physical fan-out: sum numel of each LIF's first observed output, but
+    # since spike_count_timeline already aggregates, we approximate with a
+    # quick forward pass count via hooks. Simpler: use parameter count proxy.
+    neuron_count = sum(p.numel() for p in net.parameters())
     meta = {
         "model": f"spikingresformer_{variant}",
         "dataset": dataset,
@@ -151,23 +149,15 @@ def extract(
         "img_size": str(img_size),
         "batch_size": str(batch_size),
         "num_batches": str(used_batches),
-        "N_core_cap": str(N_core_cap),
-        "V_prime": str(V_prime),
         "checkpoint": checkpoint or "",
         "data_dir": str(data_dir) if data_dir else "",
         "source": "fingerprint.extract_spikingresformer",
     }
-    return Fingerprint(
-        traffic_sequence=fp_core.traffic_sequence,
-        global_burstiness=fp_core.global_burstiness,
-        max_centrality=fp_core.max_centrality,
-        mean_components=fp_core.mean_components,
-        T=fp_core.T,
-        neuron_count=fp_core.neuron_count,
-        state_size_mb=fp_core.state_size_mb,
-        complexity_ratio=fp_core.complexity_ratio,
-        compute_sequence=fp_core.compute_sequence,
-        centrality_var=fp_core.centrality_var,
+    return extract_fingerprint_from_spikes(
+        E,
+        neuron_count=neuron_count,
+        state_size_mb=state_size_mb,
+        complexity_ratio=1.0,
         meta=meta,
     )
 
@@ -184,7 +174,6 @@ def main(argv: list[str] | None = None) -> int:
                         "If omitted, uses random dummy input.")
     p.add_argument("--num-batches", type=int, default=1)
     p.add_argument("--checkpoint", default=None)
-    p.add_argument("--core-cap", type=int, default=4096)
     p.add_argument("--out", required=True, type=Path)
     args = p.parse_args(argv)
 
@@ -192,11 +181,10 @@ def main(argv: list[str] | None = None) -> int:
     fp = extract(
         args.variant, args.dataset, args.T, args.batch_size,
         img_size, args.checkpoint, args.data_dir, args.num_batches,
-        args.core_cap,
     )
     save_fingerprint(args.out, fp)
-    print(f"saved {args.out}: T={fp.T} V'={fp.max_centrality.shape[0]} "
-          f"beta={fp.global_burstiness:.3f} K_mean={fp.mean_components:.3f}")
+    print(f"saved {args.out}: T={fp.T} neurons={fp.neuron_count} "
+          f"beta={fp.global_burstiness:.3f}")
     return 0
 
 

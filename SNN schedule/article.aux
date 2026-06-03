@@ -1,0 +1,188 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{ghodsi2011dominant}
+\citation{fang2023spikingjelly}
+\citation{zhou2023spikformer}
+\citation{merolla2014truenorth}
+\citation{davies2018loihi,orchard2021loihi2}
+\citation{mayr2019spinnaker2}
+\citation{ma2024darwin3}
+\citation{gujarati2020clockwork}
+\citation{ghodsi2011dominant}
+\citation{mohan2022looking}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{Introduction}{section.1}{}}
+\citation{davies2018loihi,orchard2021loihi2}
+\citation{merolla2014truenorth}
+\citation{mayr2019spinnaker2}
+\citation{ma2024darwin3}
+\citation{xiao2018gandiva}
+\citation{panigrahy2011heuristics}
+\citation{ghodsi2011dominant}
+\citation{mohan2022looking}
+\citation{xiao2018gandiva,weng2023beware}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background and Motivation}{2}{section.2}\protected@file@percent }
+\newlabel{sec:background}{{2}{2}{Background and Motivation}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}SNN Execution on CIM Clusters}{2}{subsection.2.1}\protected@file@percent }
+\newlabel{sec:bg:hardware}{{2.1}{2}{SNN Execution on CIM Clusters}{subsection.2.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Why Capacity-Based Scheduling Fails}{2}{subsection.2.2}\protected@file@percent }
+\newlabel{sec:bg:capacity}{{2.2}{2}{Why Capacity-Based Scheduling Fails}{subsection.2.2}{}}
+\citation{panigrahy2011heuristics,lee2011validating}
+\citation{ghodsi2011dominant}
+\citation{grandl2014multi}
+\citation{xiao2018gandiva}
+\citation{mohan2022looking}
+\citation{narayanan2020heterogeneity}
+\citation{gujarati2020clockwork}
+\citation{weng2023beware}
+\citation{288610}
+\citation{merolla2014truenorth}
+\citation{davies2018loihi,orchard2021loihi2}
+\citation{mayr2019spinnaker2}
+\citation{ma2024darwin3}
+\citation{lee2011validating}
+\citation{fang2023spikingjelly}
+\citation{zhou2023spikformer}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Why Schedule-Every-Spike Fails}{3}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:bg:perspike}{{2.3}{3}{Why Schedule-Every-Spike Fails}{subsection.2.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}The Missing Middle}{3}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:bg:middle}{{2.4}{3}{The Missing Middle}{subsection.2.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Related Work}{3}{section.3}\protected@file@percent }
+\newlabel{sec:related}{{3}{3}{Related Work}{section.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Cluster scheduling for DNN serving.}{3}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cluster-level admission control.}{3}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Neuromorphic mapping and validation.}{3}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fingerprint-driven scheduling.}{3}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Preliminaries}{3}{section.4}\protected@file@percent }
+\newlabel{sec:prelim}{{4}{3}{Preliminaries}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Workload Model}{3}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:prelim:workload}{{4.1}{3}{Workload Model}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Cluster Model}{4}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:prelim:cluster}{{4.2}{4}{Cluster Model}{subsection.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Scheduling Problem}{4}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:prelim:problem}{{4.3}{4}{Scheduling Problem}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}System Design}{4}{section.5}\protected@file@percent }
+\newlabel{sec:design}{{5}{4}{System Design}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Overview}{4}{subsection.5.1}\protected@file@percent }
+\newlabel{sec:design:overview}{{5.1}{4}{Overview}{subsection.5.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Framework.}{4}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stage\nobreakspace  {}1 --- Macro-Card Dispatch.}{4}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stage\nobreakspace  {}2 --- Temporal Phase-Shifting.}{4}{section*.7}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces STPS pipeline. \emph  {Offline:} a model is traced, lifted into a discrete-time dynamic graph, and reduced to four fingerprints. \emph  {Online:} each admission runs in two stages --- macro-dispatch picks a card $m^{*}$ from $\{C_1,\dots  ,C_K\}$ using $\overline  {K}$ and $\beta $, then phase-shift picks a start offset $\Delta t^{*}\tmspace  -\thinmuskip {.1667em}\le \tmspace  -\thinmuskip {.1667em}D_{\qopname  \relax m{max}}$ that fits the task's traffic timeline into a valley of the card's forecast. The hotspot indicator $\mathbf  {c}^{*}_{\qopname  \relax m{max}}$ is recorded but does not drive placement in the current system (dashed arrow).}}{5}{figure.1}\protected@file@percent }
+\newlabel{fig:arch}{{1}{5}{STPS pipeline. \emph {Offline:} a model is traced, lifted into a discrete-time dynamic graph, and reduced to four fingerprints. \emph {Online:} each admission runs in two stages --- macro-dispatch picks a card $m^{*}$ from $\{C_1,\dots ,C_K\}$ using $\overline {K}$ and $\beta $, then phase-shift picks a start offset $\Delta t^{*}\!\le \!D_{\max }$ that fits the task's traffic timeline into a valley of the card's forecast. The hotspot indicator $\mathbf {c}^{*}_{\max }$ is recorded but does not drive placement in the current system (dashed arrow)}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Workload Fingerprint}{5}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:design:fingerprint}{{5.2}{5}{Workload Fingerprint}{subsection.5.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Online Scheduler}{5}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:design:online}{{5.3}{5}{Online Scheduler}{subsection.5.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}Stage 1: Macro-Card Dispatch}{5}{subsubsection.5.3.1}\protected@file@percent }
+\newlabel{sec:design:macro}{{5.3.1}{5}{Stage 1: Macro-Card Dispatch}{subsubsection.5.3.1}{}}
+\newlabel{eq:macro_score}{{1}{5}{Stage 1: Macro-Card Dispatch}{equation.5.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}Stage 2: Temporal Phase-Shifting}{5}{subsubsection.5.3.2}\protected@file@percent }
+\newlabel{sec:phase_shift}{{5.3.2}{5}{Stage 2: Temporal Phase-Shifting}{subsubsection.5.3.2}{}}
+\citation{fang2023spikingjelly}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Phase-Shift Selection}}{6}{algorithm.1}\protected@file@percent }
+\newlabel{alg:phase_shift}{{1}{6}{Stage 2: Temporal Phase-Shifting}{algorithm.1}{}}
+\newlabel{eq:phase_shift}{{2}{6}{Stage 2: Temporal Phase-Shifting}{equation.5.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Spatial Mapping and Hotspot Indicator}{6}{subsection.5.4}\protected@file@percent }
+\newlabel{sec:design:spatial}{{5.4}{6}{Spatial Mapping and Hotspot Indicator}{subsection.5.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Discussion}{6}{subsection.5.5}\protected@file@percent }
+\newlabel{sec:design:discussion}{{5.5}{6}{Discussion}{subsection.5.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Implementation}{6}{section.6}\protected@file@percent }
+\newlabel{sec:impl}{{6}{6}{Implementation}{section.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Evaluation}{6}{section.7}\protected@file@percent }
+\newlabel{sec:eval}{{7}{6}{Evaluation}{section.7}{}}
+\citation{fang2023spikingjelly}
+\citation{zhou2023spikformer}
+\citation{ghodsi2011dominant}
+\citation{mohan2022looking}
+\citation{jain1984quantitative}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Experimental Setup}{7}{subsection.7.1}\protected@file@percent }
+\newlabel{sec:eval:setup}{{7.1}{7}{Experimental Setup}{subsection.7.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}RQ1: Congestion-Bounded End-to-end Behaviour}{7}{subsection.7.2}\protected@file@percent }
+\newlabel{sec:eval:congestion}{{7.2}{7}{RQ1: Congestion-Bounded End-to-end Behaviour}{subsection.7.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{The headline.}{7}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The cost.}{7}{section*.9}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces End-to-end comparison on the mixed-fingerprint workload (5 seeds, mean values; bold = best in column). STPS is the \emph  {only} scheduler that wins on both congestion metrics in every $\{$arrival, scale$\}$ cell tested at a 1--2\tmspace  +\thinmuskip {.1667em}\% throughput cost. The advantage in the worst-card max/min ratio sharpens with scale: at 16 cards STPS holds it under $13.5\times $ while every baseline develops a $14$--$24\times $ skew.}}{8}{table.1}\protected@file@percent }
+\newlabel{tab:q0_main}{{1}{8}{End-to-end comparison on the mixed-fingerprint workload (5 seeds, mean values; bold = best in column). STPS is the \emph {only} scheduler that wins on both congestion metrics in every $\{$arrival, scale$\}$ cell tested at a 1--2\,\% throughput cost. The advantage in the worst-card max/min ratio sharpens with scale: at 16 cards STPS holds it under $13.5\times $ while every baseline develops a $14$--$24\times $ skew}{table.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{The scale signal.}{8}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Is the trade favourable?}{8}{section*.11}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Throughput decomposition at 16 cards: cold-start-excluded throughput closes only $0.16$--$0.17$\tmspace  +\thinmuskip {.1667em}\% of the $0.6$--$1.4$\tmspace  +\thinmuskip {.1667em}\% gap to the best baseline. The remaining gap is contention-avoidance --- the price STPS pays to keep the NoC under its cap.}}{8}{table.2}\protected@file@percent }
+\newlabel{tab:q0_cold}{{2}{8}{Throughput decomposition at 16 cards: cold-start-excluded throughput closes only $0.16$--$0.17$\,\% of the $0.6$--$1.4$\,\% gap to the best baseline. The remaining gap is contention-avoidance --- the price STPS pays to keep the NoC under its cap}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}RQ2: Which Stage Contributes What}{8}{subsection.7.3}\protected@file@percent }
+\newlabel{sec:eval:spatial}{{7.3}{8}{RQ2: Which Stage Contributes What}{subsection.7.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Phase-shift collapses congestion at $D_{\qopname  \relax m{max}}\tmspace  -\thinmuskip {.1667em}=\tmspace  -\thinmuskip {.1667em}2$.}{9}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The card-CV anomaly is a feature, not a regression.}{9}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Three workpoints, one mechanism.}{9}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The decomposition, in one line.}{9}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}RQ3: When STPS Helps and When It Hurts}{9}{subsection.7.4}\protected@file@percent }
+\newlabel{sec:eval:temporal}{{7.4}{9}{RQ3: When STPS Helps and When It Hurts}{subsection.7.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Predictability: when Stage\nobreakspace  {}A's score carries signal.}{9}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Utilisation determines whether topology matters.}{9}{section*.17}\protected@file@percent }
+\citation{xiao2018gandiva}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Stage decomposition: each spatial policy (\textsc  {base}) paired with phase-shift (\textsc  {+ps}), and STPS's own macro-dispatch \textsc  {stps-spatial} with phase-shift added; the full scheduler is \textsc  {stps-spatial+ps}. 4 cards, mixed fingerprints, $BW_{\qopname  \relax m{max}}\tmspace  -\thinmuskip {.1667em}=\tmspace  -\thinmuskip {.1667em}9\tmspace  -\thinmuskip {.1667em}\times \tmspace  -\thinmuskip {.1667em}10^{5}$, $D_{\qopname  \relax m{max}}\tmspace  -\thinmuskip {.1667em}=\tmspace  -\thinmuskip {.1667em}2$, 5 seeds. Phase-shift collapses NoC congestion from $\sim $0.26 to $\le 0.01$ on every spatial baseline; on full STPS the drop is 0.26\tmspace  +\thinmuskip {.1667em}$\to $\tmspace  +\thinmuskip {.1667em}0.16 because Stage\nobreakspace  {}A's topology- and burstiness-aware placement has already absorbed the easiest temporal slack.}}{10}{table.3}\protected@file@percent }
+\newlabel{tab:q2_phase}{{3}{10}{Stage decomposition: each spatial policy (\textsc {base}) paired with phase-shift (\textsc {+ps}), and STPS's own macro-dispatch \textsc {stps-spatial} with phase-shift added; the full scheduler is \textsc {stps-spatial+ps}. 4 cards, mixed fingerprints, $BW_{\max }\!=\!9\!\times \!10^{5}$, $D_{\max }\!=\!2$, 5 seeds. Phase-shift collapses NoC congestion from $\sim $0.26 to $\le 0.01$ on every spatial baseline; on full STPS the drop is 0.26\,$\to $\,0.16 because Stage~A's topology- and burstiness-aware placement has already absorbed the easiest temporal slack}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Stage\nobreakspace  {}A under a utilisation sweep (4 cards $\times $ 512 cores, Poisson, mixed fingerprints, 5 seeds). At low load BestFit/DRF dominate because empty-capacity signals overwhelm topology signals; from 0.85 onward Stage\nobreakspace  {}A converges into the leader band and at 0.95 all schedulers cluster in a 0.20--0.23 strip --- the regime where physical saturation removes spatial degrees of freedom.}}{10}{table.4}\protected@file@percent }
+\newlabel{tab:q1_util}{{4}{10}{Stage~A under a utilisation sweep (4 cards $\times $ 512 cores, Poisson, mixed fingerprints, 5 seeds). At low load BestFit/DRF dominate because empty-capacity signals overwhelm topology signals; from 0.85 onward Stage~A converges into the leader band and at 0.95 all schedulers cluster in a 0.20--0.23 strip --- the regime where physical saturation removes spatial degrees of freedom}{table.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Fingerprint predictability determines whether Stage\nobreakspace  {}A wins.}{10}{section*.18}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Stage\nobreakspace  {}A under a fingerprint-composition sweep (4 cards, Poisson, 70\tmspace  +\thinmuskip {.1667em}\% utilisation). Baselines ignore fingerprints and post the same card-CV everywhere; only Stage\nobreakspace  {}A reads the workload's topology and therefore changes. At 100\tmspace  +\thinmuskip {.1667em}\% steady-flat Stage\nobreakspace  {}A delivers the lowest card-CV of any scheduler --- the design intent. The advantage erodes as the workload becomes more bursty, because $H\tmspace  -\thinmuskip {.1667em}=\tmspace  -\thinmuskip {.1667em}64$ forecast cannot resolve next-tick peaks.}}{10}{table.5}\protected@file@percent }
+\newlabel{tab:q1_mix}{{5}{10}{Stage~A under a fingerprint-composition sweep (4 cards, Poisson, 70\,\% utilisation). Baselines ignore fingerprints and post the same card-CV everywhere; only Stage~A reads the workload's topology and therefore changes. At 100\,\% steady-flat Stage~A delivers the lowest card-CV of any scheduler --- the design intent. The advantage erodes as the workload becomes more bursty, because $H\!=\!64$ forecast cannot resolve next-tick peaks}{table.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces How each metric responds as the phase-shift budget $D_{\qopname  \relax m{max}}$ grows from 2 to 16 (light regime C, 4 cards, mixed fingerprints, 5 seeds). Congestion is a switch, not a knob; load-balance improves with diminishing returns and saturates near $D_{\qopname  \relax m{max}}\tmspace  -\thinmuskip {.1667em}=\tmspace  -\thinmuskip {.1667em}8$; tail delay and throughput cost grow monotonically with the offset budget. The three columns pull in opposite directions, which is what fixes a small default.}}{11}{table.6}\protected@file@percent }
+\newlabel{tab:q2_dmax}{{6}{11}{How each metric responds as the phase-shift budget $D_{\max }$ grows from 2 to 16 (light regime C, 4 cards, mixed fingerprints, 5 seeds). Congestion is a switch, not a knob; load-balance improves with diminishing returns and saturates near $D_{\max }\!=\!8$; tail delay and throughput cost grow monotonically with the offset budget. The three columns pull in opposite directions, which is what fixes a small default}{table.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Cap binding: when Stage\nobreakspace  {}B has congestion to lever.}{11}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Offset budget: how much tail phase-shift may spend.}{11}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.5}RQ4: The Tail Cost of Holding Load Flat}{11}{subsection.7.5}\protected@file@percent }
+\newlabel{sec:eval:tail}{{7.5}{11}{RQ4: The Tail Cost of Holding Load Flat}{subsection.7.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Where the tail comes from.}{11}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{When the trade is favourable.}{11}{section*.22}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Delay survival functions across both cluster sizes and both arrival modes (5 seeds pooled, log--log). All schedulers track each other up to roughly the 90th percentile; STPS's curve only departs from the baselines above $\qopname  \relax m{Pr}[\text  {delay}\tmspace  -\thinmuskip {.1667em}>\tmspace  -\thinmuskip {.1667em}d]\tmspace  -\thinmuskip {.1667em}\approx \tmspace  -\thinmuskip {.1667em}10^{-2}$. The tasks living in that upper-right corner --- the ones STPS finishes later --- are the same bursty, high-$\beta _\tau $ population that drives p99: STPS pays its tail price exclusively on the long-tail tasks, and pays it to buy the cluster-wide load-balancing and congestion gains documented in Table\nobreakspace  {}\ref  {tab:q0_main}.}}{12}{figure.2}\protected@file@percent }
+\newlabel{fig:longtail}{{2}{12}{Delay survival functions across both cluster sizes and both arrival modes (5 seeds pooled, log--log). All schedulers track each other up to roughly the 90th percentile; STPS's curve only departs from the baselines above $\Pr [\text {delay}\!>\!d]\!\approx \!10^{-2}$. The tasks living in that upper-right corner --- the ones STPS finishes later --- are the same bursty, high-$\beta _\tau $ population that drives p99: STPS pays its tail price exclusively on the long-tail tasks, and pays it to buy the cluster-wide load-balancing and congestion gains documented in Table~\ref {tab:q0_main}}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{12}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{8}{12}{Conclusion}{section.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Cross-Regime Cap-Binding Study}{12}{appendix.A}\protected@file@percent }
+\newlabel{app:regime}{{A}{12}{Cross-Regime Cap-Binding Study}{appendix.A}{}}
+\@writefile{toc}{\contentsline {paragraph}{Card-CV reverses sign across regimes, congestion does not.}{12}{section*.23}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Cross-regime cap-binding profile (5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph  {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\qopname  \relax m{max}}]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section\nobreakspace  {}\ref  {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion.}}{13}{table.7}\protected@file@percent }
+\newlabel{tab:q2_regime_profile}{{7}{13}{Cross-regime cap-binding profile (5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max }]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion}{table.7}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Cross-regime $\Delta $card-CV under \textsc  {+ps} (5 seeds, $(off\tmspace  -\thinmuskip {.1667em}-\tmspace  -\thinmuskip {.1667em}on)/off \times 100$; positive $=$ phase-shift reduces card-CV). Every cell of the binding regime is negative; every cell of the non-binding and light regimes is positive. The direction of phase-shift's effect on card-CV is determined entirely by whether the cap is binding, independent of arrival mode, baseline policy, or even the spatial policy that phase-shift is attached to.}}{13}{table.8}\protected@file@percent }
+\newlabel{tab:q2_regime_cv}{{8}{13}{Cross-regime $\Delta $card-CV under \textsc {+ps} (5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces card-CV). Every cell of the binding regime is negative; every cell of the non-binding and light regimes is positive. The direction of phase-shift's effect on card-CV is determined entirely by whether the cap is binding, independent of arrival mode, baseline policy, or even the spatial policy that phase-shift is attached to}{table.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{The mechanism, broken down.}{13}{section*.24}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Cross-regime direction summary for the remaining Stage-B metrics. Phase-shift relieves congestion only where the cap binds (A,\nobreakspace  {}C), and only relieves p99 where the baseline queue already dominates p99 (A). The throughput cost is determined by the offset budget's ratio to the steady-state window, not by the cap.}}{13}{table.9}\protected@file@percent }
+\newlabel{tab:q2_regime_multi}{{9}{13}{Cross-regime direction summary for the remaining Stage-B metrics. Phase-shift relieves congestion only where the cap binds (A,~C), and only relieves p99 where the baseline queue already dominates p99 (A). The throughput cost is determined by the offset budget's ratio to the steady-state window, not by the cap}{table.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Extreme congestion is hostile to every scheduler, not just STPS.}{13}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{An asymmetry between two ways to relieve the cap.}{13}{section*.26}\protected@file@percent }
+\bibstyle{plain}
+\bibdata{references}
+\bibcite{davies2018loihi}{1}
+\bibcite{fang2023spikingjelly}{2}
+\bibcite{ghodsi2011dominant}{3}
+\bibcite{grandl2014multi}{4}
+\bibcite{gujarati2020clockwork}{5}
+\bibcite{jain1984quantitative}{6}
+\bibcite{lee2011validating}{7}
+\bibcite{ma2024darwin3}{8}
+\bibcite{mayr2019spinnaker2}{9}
+\bibcite{merolla2014truenorth}{10}
+\bibcite{mohan2022looking}{11}
+\bibcite{narayanan2020heterogeneity}{12}
+\bibcite{orchard2021loihi2}{13}
+\bibcite{panigrahy2011heuristics}{14}
+\bibcite{288610}{15}
+\bibcite{weng2023beware}{16}
+\bibcite{xiao2018gandiva}{17}
+\bibcite{zhou2023spikformer}{18}

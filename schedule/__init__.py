@@ -12,6 +12,7 @@ from .roundrobin import RoundRobin
 from . import bestfit     # noqa: F401
 from . import drf         # noqa: F401
 from . import p2c         # noqa: F401
+from . import phase_wrappers  # noqa: F401
 from . import roundrobin  # noqa: F401
 from . import stps        # noqa: F401
 

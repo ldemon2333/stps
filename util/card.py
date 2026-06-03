@@ -12,8 +12,7 @@ from .task import Task
 def _load_env_config():
     """Load card configuration from .env file."""
     config = {
-        'cores': 512,
-        'synapses': 50000,
+        'neuron_capacity': 8_388_608,
         'memory_gb': 128.0,
         'bandwidth_mbps': 1000.0
     }
@@ -28,10 +27,10 @@ def _load_env_config():
                     key = key.strip()
                     value = value.strip()
                     
-                    if key == 'CARD_TOTAL_CORES':
-                        config['cores'] = int(value)
-                    elif key == 'CARD_TOTAL_SYNAPSES':
-                        config['synapses'] = int(value)
+                    if key == 'CARD_TOTAL_NEURONS':
+                        config['neuron_capacity'] = int(value)
+                    elif key == 'CARD_TOTAL_CORES':
+                        config['neuron_capacity'] = int(value)
                     elif key == 'CARD_TOTAL_MEMORY_GB':
                         config['memory_gb'] = float(value)
                     elif key == 'CARD_BANDWIDTH_MBPS':
@@ -47,11 +46,22 @@ _ENV_CONFIG = _load_env_config()
 class Card:
     """Neuromorphic accelerator card that hosts a set of tasks."""
     card_id: int
-    cores: int = _ENV_CONFIG['cores']
-    synapses: int = _ENV_CONFIG['synapses']
+    neuron_capacity: Optional[int] = None
     memory_gb: float = _ENV_CONFIG['memory_gb']
     bandwidth_mbps: float = _ENV_CONFIG['bandwidth_mbps']
     tasks: List[Task] = field(default_factory=list)
+    cores: Optional[int] = None
+    synapses: Optional[int] = None
+    # docs/traffic_optim.md §A.1: per-tick NoC injection ceiling (E^(t) units).
+    # None = unlimited (bit-equivalent to pre-traffic-optim behavior).
+    bw_cap: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.neuron_capacity is None:
+            self.neuron_capacity = self.cores or _ENV_CONFIG['neuron_capacity']
+        self.cores = self.neuron_capacity
+        if self.synapses is None:
+            self.synapses = self.neuron_capacity
 
     @property
     def current_load(self) -> float:
@@ -62,13 +72,11 @@ class Card:
         self._cached_load = value
 
     def can_host(self, task: Task) -> bool:
-        used_cores = sum(t.cores_required for t in self.tasks)
-        used_synapses = sum(t.synapses_required for t in self.tasks)
+        used_neurons = sum(t.neuron_count for t in self.tasks)
         used_memory = sum(t.memory_gb_required for t in self.tasks)
 
         return (
-            (used_cores + task.cores_required <= self.cores) and
-            (used_synapses + task.synapses_required <= self.synapses) and
+            (used_neurons + task.neuron_count <= int(self.neuron_capacity)) and
             (used_memory + task.memory_gb_required <= self.memory_gb)
         )
 
@@ -140,7 +148,7 @@ class Card:
         We don't model exact 2D-mesh topology in v1; treat each card's free-core
         fraction as a proxy for "largest contiguous block".
         """
-        used = sum(t.cores_required for t in self.tasks)
-        free = max(self.cores - used, 0)
-        return float(free) / float(self.cores) if self.cores > 0 else 0.0
-
+        used = sum(t.neuron_count for t in self.tasks)
+        capacity = int(self.neuron_capacity)
+        free = max(capacity - used, 0)
+        return float(free) / float(capacity) if capacity > 0 else 0.0

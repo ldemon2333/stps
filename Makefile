@@ -11,6 +11,7 @@ DATA_OUTPUT ?=
 # STPS knobs
 FINGERPRINT_DIR ?= npz
 BW_MAX ?= 5e6
+BW_CAP ?=
 D_MAX ?= 16
 HORIZON ?= 64
 SPLIT_THRESHOLD ?= 0.2
@@ -21,13 +22,17 @@ COMMON_ARGS = --cards $(CARDS) --tasks $(TASKS) --steps $(STEPS) --seed $(SEED) 
 ifneq ($(strip $(DATA_OUTPUT)),)
 	COMMON_ARGS := $(COMMON_ARGS) --data-output $(DATA_OUTPUT)
 endif
+ifneq ($(strip $(BW_CAP)),)
+	COMMON_ARGS := $(COMMON_ARGS) --bw-cap $(BW_CAP)
+endif
 
 STPS_ARGS = --fingerprint-dir $(FINGERPRINT_DIR) --bw-max $(BW_MAX) --d-max $(D_MAX) \
             --horizon $(HORIZON) --centrality-split-threshold $(SPLIT_THRESHOLD)
 
 .PHONY: all bestfit drf p2c rr stps stps-spatial stps-temporal \
         list-schedulers fingerprints clean help compare compare-stps \
-        q1 q1-sweep q1-mix q1-all
+        q1 q1-sweep q1-mix q1-all q0 q0-arrival q0-sweep q0-scale16 q0-all q2-main4 q2-scale16 q2 q2-smoke \
+        q-traffic-calib q-traffic-main q-traffic-sens q-traffic-all
 
 # Baselines
 rr:
@@ -78,6 +83,46 @@ q1-mix:
 
 q1-all:
 	$(PYTHON) script/q1_run.py all
+
+# Q0 — End-to-End Card-Level Load Balance (see docs/Q0_TODO.md)
+q0:
+	$(PYTHON) script/q0_run.py main
+
+q0-arrival:
+	$(PYTHON) script/q0_run.py arrival
+
+q0-sweep:
+	$(PYTHON) script/q0_run.py sweep
+
+q0-scale16:
+	$(PYTHON) script/q0_run.py scale16
+
+q0-all:
+	$(PYTHON) script/q0_run.py all
+
+# Q2 — Step B Phase-Shift Vertical Ablation (see docs/Q2_TODO.md)
+q2-main4:
+	$(PYTHON) script/q2_run.py main4
+
+q2-scale16:
+	$(PYTHON) script/q2_run.py scale16
+
+q2: q2-main4 q2-scale16
+
+q2-smoke:
+	$(PYTHON) script/q2_run.py smoke
+
+# Traffic / bandwidth contention (see docs/traffic_optim.md)
+q-traffic-calib:
+	$(PYTHON) script/q_traffic_run.py calib --out-dir data/q_traffic
+
+q-traffic-main:
+	$(PYTHON) script/q_traffic_run.py main --out-dir data/q_traffic
+
+q-traffic-sens:
+	$(PYTHON) script/q_traffic_run.py sensitivity --out-dir data/q_traffic
+
+q-traffic-all: q-traffic-calib q-traffic-main q-traffic-sens
 
 list-schedulers:
 	$(PYTHON) main.py --list-schedulers

@@ -1,17 +1,38 @@
+# --- Python ---
+__pycache__/
+.pytest_cache/
+
+# --- Editor / tooling ---
+.vscode/
+.github/
+.claude
+.codex
+overleaf
+
+# --- Local config / secrets ---
+.env
+
+# --- Generated outputs ---
 data/
 results/
 log/
 plot/*.png
-.github/
-__pycache__/
-.vscode/
+
+# --- Experiment tracking & logs ---
+wandb/
+*-debug.log
+
+# --- Scratch / backups ---
 test.py
 test.sh
-overleaf
-.env
-.claude
-.pytest_cache/
+*.bak
 
+# --- Large datasets / models ---
 # ImageNet-100 imagery (fetched via script/fetch_imagenet100_val.py)
 dataset/imagenet/
 model/STEP/
+# CIFAR-10 dataset archives & batches
+dataset/cifar-10-python.tar.gz
+dataset/cifar-10-batches-py/
+# Model weight checkpoints
+*.pth

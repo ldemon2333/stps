@@ -26,13 +26,11 @@ class BestFitScheduler(BaseScheduler):
             return None
 
         def remaining_capacity(card: "Card") -> tuple:
-            used_cores = sum(t.cores_required for t in card.tasks)
+            used_neurons = sum(t.neuron_count for t in card.tasks)
             used_mem = sum(t.memory_gb_required for t in card.tasks)
-            used_syn = sum(t.synapses_required for t in card.tasks)
             return (
-                card.cores - used_cores,
+                card.neuron_capacity - used_neurons,
                 card.memory_gb - used_mem,
-                card.synapses - used_syn,
                 -len(card.tasks),
             )
 

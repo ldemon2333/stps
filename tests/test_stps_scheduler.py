@@ -32,7 +32,7 @@ def make_fp(
 ) -> Fingerprint:
     E = np.asarray(E if E is not None else [0.0, 10.0, 0.0, 0.0], dtype=np.float32)
     return Fingerprint(
-        traffic_sequence=E,
+        mean_injection_trace=E,
         global_burstiness=beta,
         max_centrality=np.array([0.1, 0.7, 0.2], dtype=np.float32),
         mean_components=K_mean,
@@ -89,15 +89,21 @@ def test_stps_selects_temporal_offset_updates_forecast_and_split_plan():
     assert chosen.beta_card > 1.0
 
 
-def test_stps_rejects_task_when_best_peak_exceeds_bandwidth_ceiling():
+def test_stps_admits_task_with_min_peak_offset_when_bw_max_infeasible():
+    """When no offset keeps the forecast peak under bw_max, STPS still places
+    the task using the min-peak offset and lets the NoC pending_traffic queue
+    absorb the overflow. The previous reject-and-drop semantics was removed in
+    the traffic_optim refactor — see docs/traffic_result.md §3."""
     cards = [Card(card_id=0)]
     scheduler = STPSScheduler(cards, horizon=4, d_max=1, bw_max=5.0)
     task = make_task()
     task.fingerprint = make_fp(np.array([10, 10, 10, 10], dtype=np.float32))
 
-    assert scheduler.select_card_for_task(task) is None
-    assert task.start_offset == 0
-    np.testing.assert_array_equal(cards[0].forecast, np.zeros(4, dtype=np.float32))
+    chosen = scheduler.select_card_for_task(task)
+    assert chosen is cards[0]
+    assert task.start_offset in (0, 1)
+    assert cards[0].forecast is not None
+    assert float(cards[0].forecast.sum()) > 0.0
 
 
 def test_stps_falls_back_to_resource_capacity_when_card_cannot_host_task():

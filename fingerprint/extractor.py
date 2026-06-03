@@ -128,7 +128,7 @@ def extract_fingerprint_from_W(
         mean_components = 0.0
 
     return Fingerprint(
-        traffic_sequence=traffic_sequence,
+        mean_injection_trace=traffic_sequence,
         global_burstiness=global_burstiness,
         max_centrality=max_centrality,
         mean_components=mean_components,
@@ -138,5 +138,47 @@ def extract_fingerprint_from_W(
         complexity_ratio=float(complexity_ratio),
         compute_sequence=compute_sequence,
         centrality_var=cvar,
+        meta=dict(meta or {}),
+    )
+
+
+def extract_fingerprint_from_spikes(
+    E: np.ndarray,
+    neuron_count: int,
+    state_size_mb: float,
+    complexity_ratio: float = 1.0,
+    meta: Optional[Dict[str, str]] = None,
+) -> "Fingerprint":
+    """Build a Fingerprint from a precomputed (T,) spike-count timeline.
+
+    Single-card deployment assumption (docs/traffic_TODO.md): E^(t) is the
+    val-set sample mean of per-tick spike counts. K̄ and c*_max degenerate
+    (K̄=1.0, c*_max = uniform), since slicing/edges are no longer modeled.
+    """
+    from . import Fingerprint
+
+    E = np.asarray(E, dtype=np.float32)
+    if E.ndim != 1:
+        raise ValueError(f"E must be a 1D spike-count timeline; got shape {E.shape}")
+    T = int(E.shape[0])
+    mean_E = float(E.mean()) if T > 0 else 0.0
+    global_burstiness = float(E.max() / mean_E) if mean_E > 1e-12 else 1.0
+
+    if int(neuron_count) <= 0:
+        raise ValueError("neuron_count must be positive")
+    V = int(neuron_count)
+    max_centrality = np.full(V, 1.0 / V, dtype=np.float32)
+
+    return Fingerprint(
+        mean_injection_trace=E,
+        global_burstiness=global_burstiness,
+        max_centrality=max_centrality,
+        mean_components=1.0,
+        T=T,
+        neuron_count=int(neuron_count),
+        state_size_mb=float(state_size_mb),
+        complexity_ratio=float(complexity_ratio),
+        compute_sequence=np.zeros(T, dtype=np.float32),
+        centrality_var=np.zeros(T, dtype=np.float32),
         meta=dict(meta or {}),
     )

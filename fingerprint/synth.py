@@ -1,6 +1,9 @@
 """Synthetic fingerprint generator (development workflows, no torch).
 
 Produces a Fingerprint matching the new §7 schema with target (β, K̄, var).
+Under the single-card spike-count semantics (docs/traffic_TODO.md),
+`traffic_sequence` is the model-wide per-tick spike-count expectation
+(unit: spikes / single inference).
 """
 from __future__ import annotations
 
@@ -21,28 +24,33 @@ def make_synthetic_fingerprint(
     neuron_count: int = 512,
     state_size_mb: float = 12.0,
     complexity_ratio: float = 1.0,
+    e_mean: float = 1.0,
     seed: Optional[int] = None,
     meta: Optional[Dict[str, str]] = None,
 ) -> "Fingerprint":
-    """Build a Fingerprint with the requested high-level statistics."""
+    """Build a Fingerprint with the requested high-level statistics.
+
+    `beta_target` must satisfy 1 ≤ β < T; values are clipped to [1, T·0.95].
+    `e_mean` rescales the resulting timeline so E.mean() == e_mean, matching
+    real-model spike-count magnitudes for end-to-end load tests.
+    """
     from . import Fingerprint
 
     rng = np.random.default_rng(seed)
     T = max(int(T), 1)
     V = max(int(V), 1)
 
-    base = 1.0
+    beta_max = max(1.0, T * 0.95)
+    beta_target = float(np.clip(beta_target, 1.0, beta_max))
     pulse_idx = int(rng.integers(0, T))
-    pulse = max(beta_target * base * T - base * T, 0.0)
-    E = np.full(T, base, dtype=np.float32)
-    if T > 1:
-        spread = max(T // 16, 1)
-        for k in range(-spread, spread + 1):
-            i = pulse_idx + k
-            if 0 <= i < T:
-                E[i] += pulse / (2 * spread + 1)
+    if T == 1 or beta_target <= 1.0:
+        E = np.ones(T, dtype=np.float32)
     else:
-        E[0] += pulse
+        H = beta_target * (T - 1) / (T - beta_target)
+        E = np.ones(T, dtype=np.float32)
+        E[pulse_idx] = H
+    scale = float(e_mean) / float(E.mean()) if E.mean() > 0 else 1.0
+    E = (E * scale).astype(np.float32)
     beta = float(E.max() / E.mean()) if E.mean() > 0 else 1.0
 
     base_c = rng.uniform(0.0, 1.0, size=V).astype(np.float32) + 1e-3
@@ -64,7 +72,7 @@ def make_synthetic_fingerprint(
     fp_meta.update(meta or {})
 
     return Fingerprint(
-        traffic_sequence=E,
+        mean_injection_trace=E,
         global_burstiness=beta,
         max_centrality=c_max,
         mean_components=K_mean,
@@ -74,5 +82,9 @@ def make_synthetic_fingerprint(
         complexity_ratio=float(complexity_ratio),
         compute_sequence=np.zeros(T, dtype=np.float32),
         centrality_var=cvar,
+        sample_measured_injection_trace=E.copy(),
+        sample_index=-1,
+        sample_label=-1,
+        sample_path=f"synthetic/{fp_meta.get('source', 'synthetic')}",
         meta=fp_meta,
     )

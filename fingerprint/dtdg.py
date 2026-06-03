@@ -25,6 +25,80 @@ class DTDGBuilder:
     """Build a (T, V', V', 2) DTDG weight tensor from a SpikingJelly forward pass."""
 
     @staticmethod
+    def spike_count_timeline_from_spikingjelly(
+        net,
+        dataloader: Iterable,
+        T: int,
+        batches: int = 1,
+    ) -> np.ndarray:
+        """Return E^(t): (T,) val-set sample mean of per-tick spike counts.
+
+        For each sample b in the dataset, E^(t)_b = sum over all LIF nodes and
+        all neurons of the spike count at tick t. We average over samples:
+            E^(t) = (1/N) Σ_b E^(t)_b
+        where N = batches * batch_size. Streaming accumulator avoids the
+        per-batch-mean ≠ overall-mean trap when batches are unequal.
+        """
+        try:
+            import torch
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("SpikingJelly path requires torch") from exc
+
+        lif_modules = [(n, m) for n, m in net.named_modules() if _is_spiking(m)]
+        if not lif_modules:
+            raise ValueError("No spiking neurons found in net")
+
+        # Each hook accumulates the running per-tick spike-count into a shared
+        # (T,) tensor for the current batch. We sum across LIF nodes inside the
+        # hook itself so we never materialize per-node tensors.
+        sum_E = np.zeros(T, dtype=np.float64)
+        n_samples = 0
+        batch_E = {"value": None}  # (T, B) for the current batch
+
+        def _hook(_mod, _inp, out):
+            arr = out.detach()
+            # SpikingJelly multi-step: leading dim is T or T*B.
+            if arr.shape[0] == T:
+                # (T, B, ...) -> sum over all non-{T,B} dims -> (T, B)
+                reduced = arr.flatten(2).sum(dim=2) if arr.dim() > 2 else arr
+            elif arr.shape[0] % T == 0:
+                B = arr.shape[0] // T
+                reduced = arr.reshape(T, B, -1).sum(dim=2)
+            else:
+                raise ValueError(
+                    f"LIF trace leading dim {arr.shape[0]} not compatible with T={T}"
+                )
+            reduced_np = reduced.float().cpu().numpy()
+            if batch_E["value"] is None:
+                batch_E["value"] = reduced_np.astype(np.float64)
+            else:
+                batch_E["value"] = batch_E["value"] + reduced_np.astype(np.float64)
+
+        hooks = [m.register_forward_hook(_hook) for _, m in lif_modules]
+
+        try:
+            net.eval()
+            with torch.no_grad():
+                for b, batch in enumerate(dataloader):
+                    if b >= batches:
+                        break
+                    batch_E["value"] = None
+                    x = batch[0] if isinstance(batch, (list, tuple)) else batch
+                    net(x)
+                    if batch_E["value"] is None:
+                        continue
+                    arr = batch_E["value"]  # (T, B)
+                    sum_E += arr.sum(axis=1)
+                    n_samples += arr.shape[1]
+        finally:
+            for h in hooks:
+                h.remove()
+
+        if n_samples == 0:
+            return np.zeros(T, dtype=np.float32)
+        return (sum_E / n_samples).astype(np.float32)
+
+    @staticmethod
     def from_spikingjelly(
         net,
         dataloader: Iterable,
