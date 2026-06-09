@@ -1,15 +1,13 @@
 # Fdb version 3
-["bibtex article"] 1780497967 "article.aux" "article.bbl" "article" 1780498047
+["bibtex article"] 1780987820 "article.aux" "article.bbl" "article" 1780988107
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/plain.bst" 1292289607 20613 bd3fbfa9f64872b81ac57a0dd2ed855f ""
-  "article.aux" 1780498047 24524 3a85af5c01305ead89e107329601abaf "pdflatex"
+  "article.aux" 1780988107 24856 245df95aa00a12b8a467ed8157d77d6e "pdflatex"
   "references.bib" 1779951458 7331 03c104928c16598b734b2822c0c333b9 ""
   (generated)
   "article.blg"
   "article.bbl"
-["pdflatex"] 1780498046 "/root/v3/SNN schedule/article.tex" "/root/v3/SNN schedule/article.pdf" "article" 1780498047
+["pdflatex"] 1780988107 "article.tex" "article.pdf" "article" 1780988107
   "/etc/texmf/web2c/texmf.cnf" 1728918713 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/root/v3/SNN schedule/article.aux" 1780498047 24524 3a85af5c01305ead89e107329601abaf ""
-  "/root/v3/SNN schedule/article.tex" 1780498046 83345 1f33fb66788f8f467022c06f5e41b9e3 ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/helvetic/phvb8r.tfm" 1136768653 4484 b828043cbd581d289d955903c1339981 ""
@@ -221,19 +219,17 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1581979058 38841 ce3692aa899bb693b90b87eaa5d4d84e ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1778467673 4770781 1ed1abab22da9c3e2cc82e4db562318b ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1778467690 8256365 28e119beba171332885925f4eb0d7c33 ""
-  "article.aux" 1780498047 24524 3a85af5c01305ead89e107329601abaf "pdflatex"
-  "article.bbl" 1780497967 5699 4ea37da5b2b6d6f3c7e52c7587509a13 "bibtex article"
-  "article.out" 1780498047 1905 dbd11cb60c30409b578db4962f918ca4 "pdflatex"
-  "article.tex" 1780498046 83345 1f33fb66788f8f467022c06f5e41b9e3 ""
+  "article.aux" 1780988107 24856 245df95aa00a12b8a467ed8157d77d6e "pdflatex"
+  "article.bbl" 1780987820 5699 4ea37da5b2b6d6f3c7e52c7587509a13 "bibtex article"
+  "article.out" 1780988107 1905 dbd11cb60c30409b578db4962f918ca4 "pdflatex"
+  "article.tex" 1780987811 87636 4c802e5b0052d243d4d2e4629483c53f ""
   "picture/stps_long_tail_16card_bursty.pdf" 1779969438 18580 52cd8da56f0055f712f2ba4225e9cb70 ""
   "picture/stps_long_tail_16card_poisson.pdf" 1779969438 18597 7836f44cef97ec4a090671414c838b50 ""
   "picture/stps_long_tail_4card_bursty.pdf" 1779969438 18138 5396dc58c70592816f7fb2d80098168d ""
   "picture/stps_long_tail_4card_poisson.pdf" 1779969438 18501 9fc132260216615ab1dcd18f4d04ede1 ""
   "usenix-2019-v3.sty" 1778437772 3795 62775b94e6f3aaf4bda0ce3e06335b5f ""
   (generated)
-  "article.log"
-  "/root/v3/SNN schedule/article.pdf"
-  "/root/v3/SNN schedule/article.log"
   "article.out"
+  "article.log"
   "article.pdf"
   "article.aux"
