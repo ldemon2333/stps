@@ -17,13 +17,30 @@ import argparse
 import csv
 import logging
 import math
+import os
 import shutil
 import tempfile
+
+# Pin BLAS / OpenMP to one thread per process BEFORE numpy is imported (via
+# simulation.engine) so the process Pool below does not oversubscribe cores.
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
+import multiprocessing as mp
+import sys
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Dict, List, Optional, Sequence
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from simulation.engine import run_simulation
+
+# Default worker count for the process pool; overridable via --workers.
+_WORKERS = 8
 
 logging.getLogger().setLevel(logging.ERROR)
 for name in ("simulation", "schedule", "util", "fingerprint", "simulation.engine"):
@@ -91,6 +108,27 @@ def _run_one(
     }
 
 
+def _run_job(job: Dict) -> Dict:
+    """Pool worker: run one simulation and merge any extra knob fields back in."""
+    row = _run_one(
+        job["scheduler"], job["seed"], job["tasks"], job["arrival_mode"],
+        fingerprint_dir=job.get("fingerprint_dir", FINGERPRINT_DIR),
+    )
+    for k in ("utilization", "flat_pct", "bursty_pct"):
+        if k in job:
+            row[k] = job[k]
+    return row
+
+
+def _run_jobs_parallel(jobs: List[Dict], workers: int) -> List[Dict]:
+    """Run a list of job specs across a spawn-based process Pool, preserving order."""
+    if workers <= 1 or len(jobs) <= 1:
+        return [_run_job(j) for j in jobs]
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=workers, maxtasksperchild=1) as pool:
+        return list(pool.map(_run_job, jobs))
+
+
 def _write_csv(path: Path, rows: List[Dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -131,33 +169,34 @@ def _aggregate(rows: List[Dict], group_keys: Sequence[str]) -> List[Dict]:
     return out
 
 
-def run_main(out_dir: Path) -> List[Dict]:
+def run_main(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
     print(f"[Q1.main] {len(SCHEDULERS)} schedulers x {len(SEEDS)} seeds, "
-          f"tasks={DEFAULT_TASKS}, steps={STEPS}, arrival=poisson")
-    rows = []
-    for sched in SCHEDULERS:
-        for seed in SEEDS:
-            print(f"  - {sched:13s} seed={seed} ...", flush=True)
-            rows.append(_run_one(sched, seed, DEFAULT_TASKS, "poisson"))
+          f"tasks={DEFAULT_TASKS}, steps={STEPS}, arrival=poisson, workers={workers}")
+    jobs = [
+        {"scheduler": sched, "seed": seed, "tasks": DEFAULT_TASKS,
+         "arrival_mode": "poisson"}
+        for sched in SCHEDULERS for seed in SEEDS
+    ]
+    rows = _run_jobs_parallel(jobs, workers)
     _write_csv(out_dir / "main_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler"])
     _write_csv(out_dir / "main_summary.csv", summary)
     return summary
 
 
-def run_sweep(out_dir: Path) -> List[Dict]:
+def run_sweep(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
     # Utilization knobs: vary `tasks` while holding everything else fixed.
     util_to_tasks = {0.30: 320, 0.50: 560, 0.70: 800, 0.85: 1020, 0.95: 1100}
     print(f"[Q1.sweep] {len(SCHEDULERS)} schedulers x {len(util_to_tasks)} util x "
-          f"{len(SEEDS)} seeds, arrival=poisson")
-    rows = []
-    for sched in SCHEDULERS:
-        for util, tasks in util_to_tasks.items():
-            for seed in SEEDS:
-                print(f"  - {sched:13s} util={util:.2f} seed={seed} ...", flush=True)
-                row = _run_one(sched, seed, tasks, "poisson")
-                row["utilization"] = util
-                rows.append(row)
+          f"{len(SEEDS)} seeds, arrival=poisson, workers={workers}")
+    jobs = [
+        {"scheduler": sched, "seed": seed, "tasks": tasks,
+         "arrival_mode": "poisson", "utilization": util}
+        for sched in SCHEDULERS
+        for util, tasks in util_to_tasks.items()
+        for seed in SEEDS
+    ]
+    rows = _run_jobs_parallel(jobs, workers)
     _write_csv(out_dir / "sweep_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler", "utilization"])
     _write_csv(out_dir / "sweep_summary.csv", summary)
@@ -187,11 +226,11 @@ def _build_mix_fingerprint_dir(parent: Path, n_flat: int, n_bursty: int) -> Path
     return parent
 
 
-def run_mix(out_dir: Path) -> List[Dict]:
+def run_mix(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
     """Real fingerprint-mix ratio sweep, controlling the Steady-Flat / Sparse-Bursty proportion."""
     ratios = [(100, 0), (75, 25), (50, 50), (25, 75), (0, 100)]
     print(f"[Q1.mix] {len(SCHEDULERS)} schedulers x {len(ratios)} mix ratios x "
-          f"{len(SEEDS)} seeds, arrival=poisson, tasks={DEFAULT_TASKS}")
+          f"{len(SEEDS)} seeds, arrival=poisson, tasks={DEFAULT_TASKS}, workers={workers}")
 
     rows: List[Dict] = []
     with tempfile.TemporaryDirectory(prefix="q1_mix_fp_") as tmp_root:
@@ -210,17 +249,18 @@ def run_mix(out_dir: Path) -> List[Dict]:
             _build_mix_fingerprint_dir(d, n_flat, n_bursty)
             ratio_dirs[(flat_pct, bursty_pct)] = str(d)
 
-        for sched in SCHEDULERS:
-            for flat_pct, bursty_pct in ratios:
-                fp_dir = ratio_dirs[(flat_pct, bursty_pct)]
-                for seed in SEEDS:
-                    label = f"{flat_pct}/{bursty_pct}"
-                    print(f"  - {sched:13s} flat/bursty={label:7s} seed={seed} ...", flush=True)
-                    row = _run_one(sched, seed, DEFAULT_TASKS, "poisson",
-                                   fingerprint_dir=fp_dir)
-                    row["flat_pct"] = flat_pct
-                    row["bursty_pct"] = bursty_pct
-                    rows.append(row)
+        jobs = [
+            {"scheduler": sched, "seed": seed, "tasks": DEFAULT_TASKS,
+             "arrival_mode": "poisson",
+             "fingerprint_dir": ratio_dirs[(flat_pct, bursty_pct)],
+             "flat_pct": flat_pct, "bursty_pct": bursty_pct}
+            for sched in SCHEDULERS
+            for flat_pct, bursty_pct in ratios
+            for seed in SEEDS
+        ]
+        # Run inside the TemporaryDirectory context so worker processes can
+        # still read the per-ratio fingerprint dirs.
+        rows = _run_jobs_parallel(jobs, workers)
 
     _write_csv(out_dir / "mix_raw.csv", rows)
     summary = _aggregate(rows, ["scheduler", "flat_pct", "bursty_pct"])
@@ -282,16 +322,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("experiment", choices=["main", "sweep", "mix", "all"])
     ap.add_argument("--out-dir", default="data/q1")
+    ap.add_argument("--workers", type=int, default=_WORKERS,
+                    help=f"parallel worker processes (default: {_WORKERS})")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
     if args.experiment in ("main", "all"):
-        summary = run_main(out_dir)
+        summary = run_main(out_dir, workers=args.workers)
         write_main_markdown(summary, Path("figures/q1/main_table.md"))
     if args.experiment in ("sweep", "all"):
-        run_sweep(out_dir)
+        run_sweep(out_dir, workers=args.workers)
     if args.experiment in ("mix", "all"):
-        run_mix(out_dir)
+        run_mix(out_dir, workers=args.workers)
     return 0
 
 
