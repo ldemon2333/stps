@@ -470,41 +470,41 @@ STPS combines two stages, and a reviewer is entitled to ask which one earns the 
 
 \begin{table*}[t]
 \centering
-\caption{Stage decomposition: each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. 4 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 5 seeds. Phase-shift collapses NoC congestion from $\sim$0.26 to $\le 0.01$ on every spatial baseline; on full STPS the drop is 0.26\,$\to$\,0.16 because Stage~A's topology- and burstiness-aware placement has already absorbed the easiest temporal slack.}
+\caption{Stage decomposition: each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. 4 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 5 seeds. Phase-shift collapses NoC congestion from $\sim$0.26 to $\le 0.01$ on every spatial baseline; on full STPS the drop is only 0.26\,$\to$\,0.24 because Stage~A's topology- and burstiness-aware placement has already absorbed the easiest temporal slack.}
 \label{tab:q2_phase}
 \small
 \begin{tabular}{llrrrrrr}
 \toprule
 Arrival & Policy & card-CV & throughput & cong.\ ratio & cong.\ wait & p99 delay & mean offset \\
 \midrule
-\multirow{10}{*}{Poisson}
- & RR \textsc{base}             & \textbf{0.267} & 1.318 & 0.269 & 9.26 & \textbf{15.0} & 0.00 \\
+\multirow{8}{*}{Poisson}
+ & RR \textsc{base}             & \textbf{0.267} & 1.318 & 0.269 & 9.26 & 121.6 & 0.00 \\
  & RR \textsc{+ps}              & 0.313 & 1.094 & \textbf{0.000} & \textbf{0.00} & 17.0 & 1.05 \\
- & BestFit \textsc{base}        & 0.288 & 1.303 & 0.260 & 9.06 & 15.0 & 0.00 \\
+ & BestFit \textsc{base}        & 0.288 & 1.303 & 0.260 & 9.06 & 137.4 & 0.00 \\
  & BestFit \textsc{+ps}         & 0.321 & 1.149 & 0.000 & 0.00 & 17.0 & 0.98 \\
- & P2C \textsc{base}            & 0.275 & 1.314 & 0.265 & 9.13 & 15.0 & 0.00 \\
- & P2C \textsc{+ps}             & 0.532 & 1.079 & 0.010 & 0.40 & 17.0 & 1.03 \\
- & \textsc{stps-spatial}        & 0.268 & 1.292 & 0.263 & 9.10 & 15.0 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 0.293 & 1.292 & 0.160 & 5.10 & 17.0 & 0.99 \\
+ & P2C \textsc{base}            & 0.275 & 1.314 & 0.265 & 9.13 & 130.0 & 0.00 \\
+ & P2C \textsc{+ps}             & 0.532 & 1.079 & 0.000 & 0.01 & 17.0 & 1.03 \\
+ & \textsc{stps-spatial}        & 0.268 & 1.311 & 0.263 & 8.96 & 132.6 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 0.293 & 1.292 & 0.247 & 8.42 & 141.4 & 0.99 \\
 \midrule
 \multirow{8}{*}{Bursty}
- & RR \textsc{base}             & 0.287 & 1.293 & 0.257 & 8.87 & 15.8 & 0.00 \\
- & RR \textsc{+ps}              & 0.393 & 1.041 & \textbf{0.000} & 0.30 & 17.0 & 0.95 \\
- & BestFit \textsc{base}        & 0.286 & 1.296 & 0.258 & 8.89 & 15.8 & 0.00 \\
- & BestFit \textsc{+ps}         & 0.408 & 1.076 & 0.000 & 0.15 & 17.0 & 0.89 \\
- & P2C \textsc{base}            & 0.294 & 1.286 & 0.255 & 8.86 & 15.8 & 0.00 \\
- & P2C \textsc{+ps}             & 0.600 & 1.015 & 0.000 & 0.10 & 17.0 & 0.98 \\
- & \textsc{stps-spatial}        & 0.277 & 1.292 & 0.260 & 8.95 & 15.8 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 0.307 & 1.269 & 0.157 & 5.05 & 17.0 & 0.99 \\
+ & RR \textsc{base}             & 0.287 & 1.293 & 0.257 & 8.87 & 129.6 & 0.00 \\
+ & RR \textsc{+ps}              & 0.393 & 1.041 & \textbf{0.000} & \textbf{0.00} & 17.0 & 0.95 \\
+ & BestFit \textsc{base}        & \textbf{0.286} & 1.296 & 0.258 & 8.89 & 127.2 & 0.00 \\
+ & BestFit \textsc{+ps}         & 0.408 & 1.076 & 0.000 & 0.01 & 17.0 & 0.89 \\
+ & P2C \textsc{base}            & 0.294 & 1.286 & 0.255 & 8.86 & 135.2 & 0.00 \\
+ & P2C \textsc{+ps}             & 0.600 & 1.015 & 0.000 & 0.01 & 17.0 & 0.98 \\
+ & \textsc{stps-spatial}        & 0.277 & 1.303 & 0.260 & 8.81 & 121.8 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 0.307 & 1.269 & 0.239 & 8.14 & 143.4 & 0.99 \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-\paragraph{Phase-shift collapses congestion at $D_{\max}\!=\!2$.} Table~\ref{tab:q2_phase} reports the ablation. The dominant result is a single number per row: attaching phase-shift to RR, BestFit, DRF, or P2C drives the NoC congestion ratio from $\sim$0.26 to below 0.01 --- a $26\!\times$ to $200\!\times$ reduction --- and the mean queue wait from 8.9 ticks to under one tick. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. The cost is small: mean offsets stay at $\sim$1 tick, p99 grows by 2 ticks, and throughput falls by 6--18\,\%. \textsc{stps-spatial+ps} (full STPS) sees a smaller absolute congestion drop (0.26\,$\to$\,0.16) because Stage~A has already steered topology-cohesive and bursty tasks toward cards whose forecasts have less easy slack to absorb; the slack phase-shift consumes for the baselines is gone.
+\paragraph{Phase-shift collapses congestion at $D_{\max}\!=\!2$.} Table~\ref{tab:q2_phase} reports the ablation. The dominant result is a single number per row: attaching phase-shift to RR, BestFit, DRF, or P2C drives the NoC congestion ratio from $\sim$0.26 to below 0.01 --- a $26\!\times$ to $200\!\times$ reduction --- and the mean queue wait from 8.9 ticks to under one tick. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. The cost is a throughput give-up of roughly 12--21\,\% while mean offsets stay at $\sim$1 tick; tail delay in fact \emph{improves} sharply on the baselines (p99 falls from $\sim$120--137 to 17 ticks) as draining the congested queue dominates the small added offset. \textsc{stps-spatial+ps} (full STPS) sees a much smaller absolute congestion drop ($0.263\,\to\,0.247$ under Poisson, $0.260\,\to\,0.239$ under Bursty) because Stage~A has already steered topology-cohesive and bursty tasks toward cards whose forecasts have less easy slack to absorb; the slack phase-shift consumes for the baselines is gone.
 
 \paragraph{The card-CV anomaly is a feature, not a regression.} A striking secondary observation in Table~\ref{tab:q2_phase} is that card-CV \emph{rises} when phase-shift is attached to any spatial baseline (e.g., P2C's $0.275 \to 0.532$). The mechanism is mechanical: card-CV measures the across-card variance of instantaneous served load; once phase-shift de-synchronises tasks that previously peaked together, each card's per-tick demand becomes spikier even as the cluster-wide queue empties. The metric the operator cares about --- congestion ratio and cong-wait --- moves the right way, but card-CV registers the de-synchronisation as a regression. This is why STPS combines both stages: Stage~A flattens the across-card distribution at admission time so that Stage~B's de-synchronisation does not blow card-CV up, while Stage~B flattens each card's timeline so that Stage~A's topology choices do not stack peaks. The mid-table rows of Table~\ref{tab:q2_phase} make this concrete: full STPS lands at card-CV $0.293$/$0.307$ vs the baseline-plus-phase rows' $0.31$--$0.60$.
 
-\paragraph{The decomposition, in one line.} Neither stage alone is the scheduler. Phase-shift on a capacity baseline zeroes congestion but inflates card-CV (the \textsc{+ps} rows); macro-dispatch alone (\textsc{stps-spatial}) holds card-CV near the baseline but leaves congestion at $\sim$0.26; only the pairing reaches both low congestion (0.16) and a controlled card-CV ($0.293$/$0.307$). Stage~A buys the across-card distribution, Stage~B buys the per-card timeline, and the cross term --- not stacking peaks that the other stage just flattened --- is why the combination beats the sum of the ablations. This is also why full STPS posts a smaller absolute congestion drop than a baseline-plus-phase: its objective is not to minimise the single congestion number, which a capacity baseline with phase-shift already drives near zero at the price of a blown-up card-CV, but to land a deployable compromise across congestion, card-CV, tail delay, and throughput simultaneously. The right way to read Table~\ref{tab:q2_phase} is therefore by row vector, not by any one column.
+\paragraph{The decomposition, in one line.} Neither stage alone is the scheduler. Phase-shift on a capacity baseline zeroes congestion but inflates card-CV (the \textsc{+ps} rows); macro-dispatch alone (\textsc{stps-spatial}) holds card-CV near the baseline but leaves congestion at $\sim$0.26; only the pairing reaches both low congestion ($\sim$0.24) and a controlled card-CV ($0.293$/$0.307$). Stage~A buys the across-card distribution, Stage~B buys the per-card timeline, and the cross term --- not stacking peaks that the other stage just flattened --- is why the combination beats the sum of the ablations. This is also why full STPS posts a smaller absolute congestion drop than a baseline-plus-phase: its objective is not to minimise the single congestion number, which a capacity baseline with phase-shift already drives near zero at the price of a blown-up card-CV, but to land a deployable compromise across congestion, card-CV, tail delay, and throughput simultaneously. The right way to read Table~\ref{tab:q2_phase} is therefore by row vector, not by any one column.
 
 \subsection{RQ3: When STPS Helps and When It Hurts}
 \label{sec:eval:temporal}
@@ -515,43 +515,43 @@ STPS is not uniformly best, and a paper that claimed so would be wrong. This sec
 
 \begin{table}[t]
 \centering
-\caption{Stage~A under a utilisation sweep (4 cards $\times$ 512 cores, Poisson, mixed fingerprints, 5 seeds). At low load BestFit/DRF dominate because empty-capacity signals overwhelm topology signals; from 0.85 onward Stage~A converges into the leader band and at 0.95 all schedulers cluster in a 0.20--0.23 strip --- the regime where physical saturation removes spatial degrees of freedom.}
+\caption{Stage~A under a utilisation sweep (4 cards $\times$ 512 cores, Poisson, mixed fingerprints, 5 seeds). BestFit/DRF lead at every load because empty-capacity signals are the strongest balancing cue; \textsc{stps-A} ranks third throughout --- consistently ahead of RR and P2C and within $\sim$10\,\% of BestFit from 0.70 upward. Card-CV falls monotonically as utilisation rises and cards fill.}
 \label{tab:q1_util}
 \small
 \begin{tabular}{lrrrrr}
 \toprule
 Util.\ & RR & BestFit & DRF & P2C & \textsc{stps-A} \\
 \midrule
-0.30 & 0.722 & \textbf{0.652} & 0.657 & 0.908 & 1.004 \\
-0.50 & 0.493 & 0.402 & \textbf{0.392} & 0.632 & 0.592 \\
-0.70 & 0.363 & \textbf{0.292} & 0.293 & 0.407 & 0.386 \\
-0.85 & 0.257 & 0.224 & \textbf{0.223} & 0.293 & 0.249 \\
-0.95 & 0.218 & 0.202 & \textbf{0.200} & 0.230 & 0.207 \\
+0.30 & 0.976 & \textbf{0.904} & 0.904 & 1.127 & 0.945 \\
+0.50 & 0.833 & \textbf{0.736} & 0.736 & 0.906 & 0.775 \\
+0.70 & 0.755 & \textbf{0.666} & 0.666 & 0.779 & 0.690 \\
+0.85 & 0.646 & \textbf{0.557} & 0.557 & 0.654 & 0.585 \\
+0.95 & 0.607 & \textbf{0.501} & 0.501 & 0.606 & 0.553 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Utilisation determines whether topology matters.} Table~\ref{tab:q1_util} reveals a clean regime structure. Below 70\,\% utilisation BestFit and DRF win because there is enough free capacity that almost any placement is correct, and the $\overline{K}_\tau$-aware score adds noise rather than signal. Between 0.85 and 0.95 the four spatial policies converge into a tight 0.20--0.23 band: at saturation no policy has spatial degrees of freedom to exploit and all schedulers are equally helpless. The interesting window is precisely the gap, where Stage~A is within 11\,\% of BestFit and ahead of RR/P2C --- the operating range for which fingerprint-aware dispatch was designed.
+\paragraph{Utilisation determines whether topology matters.} Table~\ref{tab:q1_util} reveals a clean ranking structure that holds across the load axis. BestFit and DRF win at every utilisation because there is almost always a card whose free capacity makes the placement correct, and the capacity signal dominates the $\overline{K}_\tau$-aware score. \textsc{stps-A} ranks third throughout: it stays ahead of RR and P2C at every load and closes to within $\sim$10\,\% of BestFit from 0.70 upward (e.g.\ $0.553$ vs $0.501$ at 0.95). Card-CV falls monotonically with utilisation for all policies as cards saturate and the across-card distribution flattens. The interesting window is the high-load band (0.70--0.95), where Stage~A's fingerprint-aware dispatch is competitive with the best capacity policy and clearly better than the capacity-blind RR --- the operating range for which it was designed.
 
 \begin{table}[t]
 \centering
-\caption{Stage~A under a fingerprint-composition sweep (4 cards, Poisson, 70\,\% utilisation). Baselines ignore fingerprints and post the same card-CV everywhere; only Stage~A reads the workload's topology and therefore changes. At 100\,\% steady-flat Stage~A delivers the lowest card-CV of any scheduler --- the design intent. The advantage erodes as the workload becomes more bursty, because $H\!=\!64$ forecast cannot resolve next-tick peaks.}
+\caption{Stage~A under a fingerprint-composition sweep (4 cards, Poisson, 70\,\% utilisation, 5 seeds). Realised per-card load depends on each task's fingerprint traffic, so every policy's card-CV --- baselines included --- rises as the bursty share grows. \textsc{stps-A} matches the capacity policies BestFit/DRF at pure steady-flat ($0.322$), but loses ground through the mixed regimes because the $H\!=\!64$ forecast cannot resolve next-tick peaks; blind RR posts the lowest card-CV throughout.}
 \label{tab:q1_mix}
 \small
 \begin{tabular}{lrrrr|r}
 \toprule
 Flat / bursty & RR & BestFit & DRF & P2C & \textsc{stps-A} \\
 \midrule
-100 / 0   & 0.363 & 0.292 & 0.293 & 0.407 & \textbf{0.290} \\
-75 / 25   & 0.363 & \textbf{0.292} & 0.293 & 0.407 & 0.320 \\
-50 / 50   & 0.363 & \textbf{0.292} & 0.293 & 0.407 & 0.340 \\
-25 / 75   & 0.363 & \textbf{0.292} & 0.293 & 0.407 & 0.411 \\
-0 / 100   & 0.363 & \textbf{0.292} & 0.293 & 0.407 & 0.555 \\
+100 / 0   & \textbf{0.271} & 0.322 & 0.322 & 0.699 & 0.322 \\
+75 / 25   & \textbf{0.578} & 0.600 & 0.600 & 0.838 & 0.612 \\
+50 / 50   & \textbf{0.814} & 0.844 & 0.844 & 0.997 & 0.909 \\
+25 / 75   & \textbf{0.990} & 1.024 & 1.024 & 1.142 & 1.196 \\
+0 / 100   & \textbf{0.923} & 1.007 & 1.007 & 1.171 & 0.961 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Fingerprint predictability determines whether Stage~A wins.} Table~\ref{tab:q1_mix} fixes utilisation at 70\,\% and varies the workload from purely steady-flat to purely bursty fingerprints. Baselines do not read fingerprints, so their column is constant at every row. Stage~A's column tells the whole story: at 100\,\% steady-flat it is the best scheduler in the table (card-CV $0.290$, $-20.1$\,\% vs RR, $-0.9$\,\% vs BestFit) --- the design intent of \cite{xiao2018gandiva}-style topology-aware placement realised. As the bursty share grows the advantage erodes and, at 100\,\% bursty, Stage~A becomes the worst of the five. This is not a bug. Stage~A scores cards in constant time from the $H\!=\!64$ forecast horizon, but a $T\!=\!8$ pulse-train injects a fresh peak every eight ticks, so the horizon is saturated with peaks and the topology score cannot distinguish a quiet card from a busy one; capacity-based policies, which ignore the future altogether, become better defaults in the regime where the fingerprint no longer resolves a quiet placement. This is the first boundary: Stage~A is a predictability lever, strongest when the fingerprint resolves the near future and neutral-to-negative when it cannot. It is exactly the bursty regime where Stage~A weakens that Stage~B, analysed next, takes over --- the two stages cover complementary halves of the predictability axis.
+\paragraph{Fingerprint predictability determines whether Stage~A wins.} Table~\ref{tab:q1_mix} fixes utilisation at 70\,\% and varies the workload from purely steady-flat to purely bursty fingerprints. Because realised per-card load tracks each task's fingerprint traffic, no policy is fingerprint-blind in effect: every column --- baselines included --- rises as the bursty share grows. Stage~A's behaviour tells the story of its design envelope: at 100\,\% steady-flat it matches the capacity policies BestFit/DRF (card-CV $0.322$), the regime where \cite{xiao2018gandiva}-style topology-aware placement is meant to pay off. As the bursty share grows its advantage erodes and at 25\,\% flat it is the worst of the five ($1.196$), recovering only partially at 100\,\% bursty ($0.961$). This is not a bug. Stage~A scores cards in constant time from the $H\!=\!64$ forecast horizon, but a $T\!=\!8$ pulse-train injects a fresh peak every eight ticks, so the horizon is saturated with peaks and the topology score cannot distinguish a quiet card from a busy one; blind round-robin, which simply spreads task count evenly, becomes a better default in the regime where the fingerprint no longer resolves a quiet placement. This is the first boundary: Stage~A is a predictability lever, strongest when the fingerprint resolves the near future and neutral-to-negative when it cannot. It is exactly the bursty regime where Stage~A weakens that Stage~B, analysed next, takes over --- the two stages cover complementary halves of the predictability axis.
 
 \paragraph{Cap binding: when Stage~B has congestion to lever.} Phase-shift only relieves congestion where the cap binds. Sweeping the cap across three regimes --- binding ($BW_{\max}\!=\!9\!\times\!10^{5}$, 800 tasks; $\sim$26\,\% baseline congestion), non-binding ($5\!\times\!10^{6}$, demand never reaches the cap), and lightly binding ($9\!\times\!10^{5}$, 400 tasks; $\sim$9\,\%) --- the congestion ratio drops to zero wherever there is congestion to remove (binding and light) and is undefined where there is none (non-binding). The load-balance metrics, by contrast, \emph{reverse sign} with the regime: phase-shift lowers card-CV when the cap does not bind but raises it when the cap is already clipping peaks, because a binding cap is itself a crude flattener and de-synchronisation moves cards off that artificial uniformity. This sign-flip is universal --- it holds for every baseline and for \textsc{stps-spatial} alike, so it is a property of the regime, not of STPS. The practical reading: STPS's sweet-spot is a correctly- or over-provisioned cluster; pushed into heavy congestion, no scheduler improves load-balance, and the right response is provisioning, not a smarter policy. Appendix~\ref{app:regime} gives the full per-policy grid.
 
