@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import random
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -40,6 +41,7 @@ class SimulationEngine:
         d_max: int = 16,
         horizon: int = 64,
         centrality_split_threshold: float = 0.2,
+        queue_depth_factor: float = 8.0,
         wandb: bool = False,
         wandb_project: str = "stps-simulation",
         wandb_run_name: Optional[str] = None,
@@ -62,6 +64,7 @@ class SimulationEngine:
         self.d_max = d_max
         self.horizon = horizon
         self.centrality_split_threshold = centrality_split_threshold
+        self.queue_depth_factor = queue_depth_factor
         self.wandb = wandb
         self.wandb_project = wandb_project
         self.wandb_run_name = wandb_run_name
@@ -207,6 +210,8 @@ class SimulationEngine:
         self._card_epoch_load = {card.card_id: 0.0 for card in self.cards}
         self._card_epoch_demand = {card.card_id: 0.0 for card in self.cards}
         self._card_epoch_backlog = {card.card_id: 0.0 for card in self.cards}
+        # Per-card NoC injection queue: FIFO of [task, residual_traffic].
+        self._card_queue = {card.card_id: deque() for card in self.cards}
 
         self.scheduler = self._initialize_scheduler(scheduler_class)
         # Hand the scheduler a read-only view of cluster epoch loads.
@@ -310,19 +315,28 @@ class SimulationEngine:
         return self.metrics
 
     def _tick(self, t: int) -> None:
-        """Per-tick bandwidth-aware service (docs/traffic_optim.md §A.2).
+        """Per-tick NoC injection-queue service.
 
-        For each card:
-          1. compute task-level demand (pending_traffic preferred, else next trace quantum);
-          2. if bw_cap is set, scale per-task served traffic proportionally;
-          3. write pending back to tasks whose quantum wasn't fully served;
-          4. only fully-served tasks advance tick_index and become eligible for
-             duration_steps decrement in _handle_completions.
+        Each card has a bounded FIFO injection queue drained at <= bw_cap per
+        tick. Per card:
+          1. pull each task's new quantum (pending_traffic preferred, else next
+             trace quantum), gated on start_offset;
+          2. enqueue the quantum unless the queue is at depth (buf_depth =
+             queue_depth_factor * cap) -> backpressure: hold as pending, no drop;
+          3. serve the queue FIFO up to cap; a task fully drained for the tick
+             advances tick_index, a partially-served one keeps its residual and
+             counts a congestion-wait tick;
+          4. cap=None bypasses the queue and serves all demand (bit-equivalent
+             to the pre-queue no-cap path).
         """
-        # Determine task demand for this tick.
-        executable: List[Task] = []
+        # New-arrival quantum per task this tick.
         task_demand: Dict[int, float] = {}
+        queued_ids = {id(tk) for q in self._card_queue.values() for tk, _ in q}
         for task in self.active_tasks:
+            if id(task) in queued_ids:
+                # Already has a residual quantum in the NoC queue; don't re-pull.
+                task.current_traffic = 0.0
+                continue
             if task.start_offset > 0 and task.placement_step >= 0 \
                     and t < task.placement_step + task.start_offset:
                 task.current_traffic = 0.0
@@ -332,53 +346,78 @@ class SimulationEngine:
             else:
                 demand = task.next_trace_quantum()
             task_demand[id(task)] = demand
-            executable.append(task)
 
-        # Per-tick demand per card (used for cap/scale this tick).
-        tick_demand: Dict[int, float] = {}
         for card in self.cards:
             if card.card_id not in self._card_epoch_demand:
                 self._card_epoch_demand[card.card_id] = 0.0
                 self._card_epoch_backlog[card.card_id] = 0.0
             d_tick = sum(task_demand.get(id(tk), 0.0) for tk in card.tasks)
-            tick_demand[card.card_id] = d_tick
             self._card_epoch_demand[card.card_id] += d_tick
-
-        # Apply per-card bandwidth limit.
-        for card in self.cards:
-            d = tick_demand[card.card_id]
             cap = card.bw_cap
-            served_total = float(cap) if cap is not None and d > cap else d
-            if cap is None or d <= cap:
-                scale = 1.0
-            else:
-                scale = served_total / d if d > 0 else 0.0
-            self._card_epoch_load[card.card_id] += served_total
-            backlog_total = 0.0
-            for tk in card.tasks:
-                if id(tk) not in task_demand:
-                    tk.current_traffic = 0.0
-                    continue
-                demand = task_demand[id(tk)]
-                served = demand * scale
-                tk.current_traffic = served
-                leftover = demand - served
-                if leftover > 1e-12 and cap is not None:
-                    tk.pending_traffic = leftover
-                    tk.blocked_ticks += 1
-                    tk.congestion_wait_ticks += 1
-                    backlog_total += leftover
-                    # Timeout circuit-breaker: force drain.
-                    if tk.blocked_ticks > self._max_backlog_ticks:
-                        self.metrics.congestion_timeouts += 1  # type: ignore[union-attr]
-                        tk.pending_traffic = 0.0
-                        tk.blocked_ticks = 0
-                        tk.advance_trace_tick()
-                else:
+
+            # No cap: serve everything, no queue (bit-equivalent to old path).
+            if cap is None:
+                self._card_epoch_load[card.card_id] += d_tick
+                for tk in card.tasks:
+                    if id(tk) not in task_demand:
+                        tk.current_traffic = 0.0
+                        continue
+                    tk.current_traffic = task_demand[id(tk)]
                     tk.pending_traffic = 0.0
                     tk.blocked_ticks = 0
                     tk.advance_trace_tick()
-            self._card_epoch_backlog[card.card_id] = backlog_total
+                self._card_epoch_backlog[card.card_id] = 0.0
+                continue
+
+            q = self._card_queue[card.card_id]
+            buf_depth = max(self.queue_depth_factor, 1.0) * float(cap)
+            queued = sum(res for _, res in q)
+            for tk in card.tasks:
+                tk.current_traffic = 0.0
+                d = task_demand.get(id(tk), 0.0)
+                if d <= 0.0:
+                    continue
+                # Always admit at least one task to a non-empty/empty queue so a
+                # quantum larger than buf_depth can't deadlock; otherwise apply
+                # backpressure once the buffer is full (hold upstream, no drop).
+                if q and queued + d > buf_depth:
+                    tk.pending_traffic = d
+                    tk.blocked_ticks += 1
+                    tk.congestion_wait_ticks += 1
+                    continue
+                q.append([tk, d])
+                queued += d
+                tk.pending_traffic = 0.0
+
+            # Drain FIFO up to cap this tick.
+            budget = float(cap)
+            served_total = 0.0
+            while q and budget > 1e-12:
+                head = q[0]
+                tk, res = head[0], head[1]
+                take = res if res <= budget else budget
+                tk.current_traffic += take
+                budget -= take
+                served_total += take
+                if res - take > 1e-12:
+                    head[1] = res - take
+                    break
+                q.popleft()
+                tk.blocked_ticks = 0
+                tk.advance_trace_tick()
+            self._card_epoch_load[card.card_id] += served_total
+            self._card_epoch_backlog[card.card_id] = sum(res for _, res in q)
+
+            # Congestion-wait + timeout circuit-breaker for still-queued tasks.
+            for entry in list(q):
+                tk = entry[0]
+                tk.congestion_wait_ticks += 1
+                tk.blocked_ticks += 1
+                if tk.blocked_ticks > self._max_backlog_ticks:
+                    self.metrics.congestion_timeouts += 1  # type: ignore[union-attr]
+                    q.remove(entry)
+                    tk.blocked_ticks = 0
+                    tk.advance_trace_tick()
 
     def _record_load(self) -> None:
         # Kept for API compatibility; _tick already populates epoch loads.
@@ -484,6 +523,7 @@ def run_simulation(
     d_max: int = 16,
     horizon: int = 64,
     centrality_split_threshold: float = 0.2,
+    queue_depth_factor: float = 8.0,
     wandb: bool = False,
     wandb_project: str = "stps-simulation",
     wandb_run_name: Optional[str] = None,
@@ -507,6 +547,7 @@ def run_simulation(
         d_max=d_max,
         horizon=horizon,
         centrality_split_threshold=centrality_split_threshold,
+        queue_depth_factor=queue_depth_factor,
         wandb=wandb,
         wandb_project=wandb_project,
         wandb_run_name=wandb_run_name,

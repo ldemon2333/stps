@@ -60,6 +60,8 @@ Examples:
                         help="Forecast traffic horizon in ticks (STPS only)")
     parser.add_argument("--centrality-split-threshold", type=float, default=0.2,
                         help="Hotspot-split threshold on centrality (STPS only)")
+    parser.add_argument("--queue-depth-factor", type=float, default=8.0,
+                        help="NoC injection-queue depth as multiple of bw_cap (buffer before backpressure)")
 
     # Optional Weights & Biases logging for per-step curves.
     parser.add_argument("--wandb", action="store_true",
@@ -109,6 +111,7 @@ def main() -> int:
             d_max=args.d_max,
             horizon=args.horizon,
             centrality_split_threshold=args.centrality_split_threshold,
+            queue_depth_factor=args.queue_depth_factor,
             wandb=args.wandb,
             wandb_project=args.wandb_project,
             wandb_run_name=args.wandb_run_name,

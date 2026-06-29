@@ -15,6 +15,7 @@ BW_CAP ?=
 D_MAX ?= 16
 HORIZON ?= 64
 SPLIT_THRESHOLD ?= 0.2
+QUEUE_DEPTH ?=
 
 COMMON_ARGS = --cards $(CARDS) --tasks $(TASKS) --steps $(STEPS) --seed $(SEED) \
               --log-dir $(LOG_DIR) --data-dir $(DATA_DIR) --arrival-mode $(ARRIVAL_MODE)
@@ -24,6 +25,9 @@ ifneq ($(strip $(DATA_OUTPUT)),)
 endif
 ifneq ($(strip $(BW_CAP)),)
 	COMMON_ARGS := $(COMMON_ARGS) --bw-cap $(BW_CAP)
+endif
+ifneq ($(strip $(QUEUE_DEPTH)),)
+	COMMON_ARGS := $(COMMON_ARGS) --queue-depth-factor $(QUEUE_DEPTH)
 endif
 
 STPS_ARGS = --fingerprint-dir $(FINGERPRINT_DIR) --bw-max $(BW_MAX) --d-max $(D_MAX) \

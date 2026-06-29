@@ -207,7 +207,11 @@ class SimulationMetrics:
         for c in cards:
             d = demand[c.card_id]
             s = served[c.card_id]
-            cong[c.card_id] = ((d - s) / d) if d > 0 else 0.0
+            b = backlog[c.card_id]
+            # Queue congestion: fraction of offered work (served + still-queued)
+            # left waiting. Robust to cross-tick decoupling of demand and serve.
+            denom = s + b
+            cong[c.card_id] = (b / denom) if denom > 0 else 0.0
             if c.bw_cap is not None and c.bw_cap > 0:
                 util[c.card_id] = s / float(c.bw_cap)
             else:
