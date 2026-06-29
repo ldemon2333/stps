@@ -3,14 +3,14 @@ INPUT /etc/texmf/web2c/texmf.cnf
 INPUT /usr/share/texmf/web2c/texmf.cnf
 INPUT /usr/share/texlive/texmf-dist/web2c/texmf.cnf
 INPUT /var/lib/texmf/web2c/pdftex/pdflatex.fmt
-INPUT article.tex
-OUTPUT article.log
+INPUT /root/v3/SNN schedule/article.tex
+OUTPUT /root/v3/SNN schedule/article.log
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/size10.clo
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/size10.clo
-INPUT usenix-2019-v3.sty
-INPUT usenix-2019-v3.sty
+INPUT /root/v3/SNN schedule/usenix-2019-v3.sty
+INPUT /root/v3/SNN schedule/usenix-2019-v3.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/psnfss/mathptmx.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/psnfss/mathptmx.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/fontenc.sty
@@ -206,6 +206,59 @@ INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries
 INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarycalc.code.tex
 INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarybackgrounds.code.tex
 INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarybackgrounds.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/latex/pgfplots/pgfplots.sty
+INPUT /usr/share/texlive/texmf-dist/tex/latex/pgfplots/pgfplots.sty
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.revision.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.revision.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-luatex.def
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotscore.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/sys/pgfplotssysgeneric.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/libs/pgfplotslibrary.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/oldpgfcompatib/pgfplotsoldpgfsupp_loader.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryfpu.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryfpu.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryfpu.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotsutil.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/liststructure/pgfplotsliststructure.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/liststructure/pgfplotsliststructureext.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/liststructure/pgfplotsarray.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/liststructure/pgfplotsmatrix.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/numtable/pgfplotstableshared.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/liststructure/pgfplotsdeque.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotsbinary.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotsbinary.data.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotsutil.verb.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/libs/pgflibrarypgfplots.surfshading.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/sys/pgflibrarypgfplots.surfshading.pgfsys-pdftex.def
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/sys/pgflibrarypgfplots.surfshading.pgfsys-pdftex.def
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotscolormap.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/util/pgfplotscolor.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotsstackedplots.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotsplothandlers.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotsmeshplothandler.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotsmeshplotimage.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.scaling.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotscoordprocessing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.errorbars.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.markers.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplotsticks.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgfplots/pgfplots.paths.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmoduledecorations.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.pathmorphing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.pathmorphing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.pathmorphing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.pathmorphing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.pathreplacing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.pathreplacing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.pathreplacing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.pathreplacing.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryplotmarks.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryplotmarks.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryplotmarks.code.tex
+INPUT /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryplotmarks.code.tex
 INPUT /usr/share/texlive/texmf-dist/tex/latex/filecontents/filecontents.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/filecontents/filecontents.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/tools/bm.sty
@@ -238,9 +291,9 @@ INPUT /usr/share/texlive/texmf-dist/tex/latex/multirow/multirow.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/multirow/multirow.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdfmode.def
 INPUT /usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdfmode.def
-INPUT article.aux
-INPUT article.aux
-OUTPUT article.aux
+INPUT /root/v3/SNN schedule/article.aux
+INPUT /root/v3/SNN schedule/article.aux
+OUTPUT /root/v3/SNN schedule/article.aux
 INPUT /usr/share/texlive/texmf-dist/tex/latex/psnfss/omspzccm.fd
 INPUT /usr/share/texlive/texmf-dist/tex/latex/psnfss/omspzccm.fd
 INPUT /usr/share/texlive/texmf-dist/tex/latex/microtype/mt-ptm.cfg
@@ -257,14 +310,14 @@ INPUT /usr/share/texlive/texmf-dist/tex/latex/refcount/refcount.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/refcount/refcount.sty
 INPUT /usr/share/texlive/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty
 INPUT /usr/share/texlive/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty
-INPUT article.out
-INPUT article.out
-INPUT article.out
-INPUT article.out
-OUTPUT article.pdf
-INPUT ./article.out
-INPUT ./article.out
-OUTPUT article.out
+INPUT /root/v3/SNN schedule/article.out
+INPUT /root/v3/SNN schedule/article.out
+INPUT /root/v3/SNN schedule/article.out
+INPUT /root/v3/SNN schedule/article.out
+OUTPUT /root/v3/SNN schedule/article.pdf
+INPUT /root/v3/SNN schedule/article.out
+INPUT /root/v3/SNN schedule/article.out
+OUTPUT /root/v3/SNN schedule/article.out
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmr8t.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmb8t.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmr8t.tfm
@@ -470,29 +523,32 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmri8r.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/vf/adobe/times/ptmr8t.vf
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmr8r.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmrc8t.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/vf/adobe/times/ptmrc8t.vf
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmr8r.tfm
-INPUT picture/stps_long_tail_4card_poisson.pdf
-INPUT ./picture/stps_long_tail_4card_poisson.pdf
-INPUT ./picture/stps_long_tail_4card_poisson.pdf
-INPUT picture/stps_long_tail_4card_bursty.pdf
-INPUT ./picture/stps_long_tail_4card_bursty.pdf
-INPUT ./picture/stps_long_tail_4card_bursty.pdf
-INPUT picture/stps_long_tail_16card_poisson.pdf
-INPUT ./picture/stps_long_tail_16card_poisson.pdf
-INPUT ./picture/stps_long_tail_16card_poisson.pdf
-INPUT picture/stps_long_tail_16card_bursty.pdf
-INPUT ./picture/stps_long_tail_16card_bursty.pdf
-INPUT ./picture/stps_long_tail_16card_bursty.pdf
+INPUT /usr/share/texlive/texmf-dist/fonts/vf/adobe/times/ptmrc8t.vf
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/adobe/times/ptmr8r.tfm
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_bursty.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_bursty.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_4card_bursty.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_poisson.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_bursty.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_bursty.pdf
+INPUT /root/v3/SNN schedule/picture/stps_long_tail_16card_bursty.pdf
 INPUT /usr/share/texlive/texmf-dist/fonts/vf/adobe/times/zptmcmr.vf
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/vf/adobe/times/zptmcmr.vf
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr10.tfm
-INPUT article.bbl
-INPUT article.bbl
-INPUT article.aux
-INPUT ./article.out
-INPUT ./article.out
+INPUT /root/v3/SNN schedule/article.bbl
+INPUT /root/v3/SNN schedule/article.bbl
+INPUT /root/v3/SNN schedule/article.aux
+INPUT /root/v3/SNN schedule/article.out
+INPUT /root/v3/SNN schedule/article.out
 INPUT /usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc
 INPUT /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
 INPUT /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb

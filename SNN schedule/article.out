@@ -19,10 +19,10 @@
 \BOOKMARK [2][-]{subsection.5.5}{Discussion}{section.5}% 19
 \BOOKMARK [1][-]{section.6}{Implementation}{}% 20
 \BOOKMARK [1][-]{section.7}{Evaluation}{}% 21
-\BOOKMARK [2][-]{subsection.7.1}{Experimental Setup}{section.7}% 22
-\BOOKMARK [2][-]{subsection.7.2}{RQ1: Congestion-Bounded End-to-end Behaviour}{section.7}% 23
-\BOOKMARK [2][-]{subsection.7.3}{RQ2: Which Stage Contributes What}{section.7}% 24
-\BOOKMARK [2][-]{subsection.7.4}{RQ3: When STPS Helps and When It Hurts}{section.7}% 25
-\BOOKMARK [2][-]{subsection.7.5}{RQ4: The Tail Cost of Holding Load Flat}{section.7}% 26
+\BOOKMARK [2][-]{subsection.7.1}{Trace-Driven Setup Exposes NoC Contention}{section.7}% 22
+\BOOKMARK [2][-]{subsection.7.2}{RQ1: STPS Consistently Reduces NoC Congestion}{section.7}% 23
+\BOOKMARK [2][-]{subsection.7.3}{RQ2: Macro-Dispatch and Phase-Shift Are Complementary}{section.7}% 24
+\BOOKMARK [2][-]{subsection.7.4}{RQ3: STPS Helps in Predictable, Non-Extreme Regimes}{section.7}% 25
+\BOOKMARK [2][-]{subsection.7.5}{RQ4: Tail Delay Is Confined to the Worst 1\045}{section.7}% 26
 \BOOKMARK [1][-]{section.8}{Conclusion}{}% 27
 \BOOKMARK [1][-]{appendix.A}{Cross-Regime Cap-Binding Study}{}% 28
