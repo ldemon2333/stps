@@ -57,6 +57,13 @@ class STPSScheduler(BaseScheduler):
         # so Stage 2 cannot pick a heavily-loaded card just because its forecast
         # happens to be low. 0.0 = no pruning (old behavior).
         stage1_cull_frac: float = 0.0,
+        # EXP-3 (robustness): multiplicative +/- noise applied to the *scheduler's
+        # view* of each fingerprint's traffic timeline and burstiness, modelling
+        # calibration-to-deployment drift. The engine still simulates the true,
+        # unperturbed fingerprint, so this isolates decision robustness. 0.0 =
+        # off (bit-equivalent to the base scheduler).
+        fingerprint_noise: float = 0.0,
+        fingerprint_noise_seed: int = 0,
         **kwargs,
     ) -> None:
         super().__init__(cards=cards, **kwargs)
@@ -72,6 +79,12 @@ class STPSScheduler(BaseScheduler):
         self.backlog_weight = float(backlog_weight)
         self.load_ema_alpha = float(load_ema_alpha)
         self.stage1_cull_frac = float(stage1_cull_frac)
+        self.fingerprint_noise = float(fingerprint_noise)
+        self.fingerprint_noise_seed = int(fingerprint_noise_seed)
+        self._noisy_fp_cache: dict[int, "Fingerprint"] = {}
+        # Stage-3 hotspot split is a pure function of the offline fingerprint;
+        # memoize per fingerprint so its O(V') scan is not paid per admission.
+        self._split_cache: dict = {}
         # Per-card EMA of served epoch load (改动 A). Maintained in step().
         self._load_ema: dict[int, float] = {c.card_id: 0.0 for c in cards}
         # Per-card EMA of epoch backlog (改动 D). Read from engine each step.
@@ -110,6 +123,8 @@ class STPSScheduler(BaseScheduler):
 
     def select_card_for_task(self, task: "Task") -> Optional["Card"]:
         fp = self._resolve_fingerprint(task)
+        if fp is not None and self.fingerprint_noise > 0.0:
+            fp = self._noisy_view(task, fp)
 
         candidates = [c for c in self.cards if c.can_host(task)]
         if not candidates:
@@ -137,9 +152,7 @@ class STPSScheduler(BaseScheduler):
             chosen = candidates[0]
 
         if self.USE_STAGE3 and fp is not None:
-            task.split_plan = split_population(
-                fp.max_centrality, self.centrality_split_threshold
-            )
+            task.split_plan = self._cached_split(task, fp)
 
         if fp is not None:
             chosen.update_beta_card(fp.global_burstiness, self.ema_alpha)
@@ -197,6 +210,60 @@ class STPSScheduler(BaseScheduler):
         if best is None:
             return None, 0, math.inf
         return best
+
+    def _cached_split(self, task: "Task", fp: Fingerprint) -> List[int]:
+        """Memoize Stage-3 hotspot indices per fingerprint.
+
+        ``split_population`` depends only on the offline fingerprint's per-neuron
+        centrality and the fixed threshold -- not on any runtime state -- so it
+        is computed once per distinct fingerprint rather than per admission.
+        Without this the O(V') scan over multi-million-neuron centrality arrays
+        dominates the admission decision (EXP-2); memoization restores the
+        O(M)+O(D_max*H) online cost the design intends. Result is identical to
+        recomputing every call.
+        """
+        key = getattr(task, "fingerprint_path", None) or id(fp.max_centrality)
+        cached = self._split_cache.get(key)
+        if cached is None:
+            cached = split_population(fp.max_centrality, self.centrality_split_threshold)
+            self._split_cache[key] = cached
+        return cached
+
+    def _noisy_view(self, task: "Task", fp: Fingerprint) -> Fingerprint:
+        """Return a perturbed copy of ``fp`` for scheduling decisions only.
+
+        Applies deterministic multiplicative +/- ``fingerprint_noise`` noise to
+        the effective traffic timeline and to the burstiness scalar, modelling
+        the gap between the offline-calibrated fingerprint and the tenant's
+        actual deployment traffic (EXP-3). The engine keeps simulating the true
+        fingerprint via ``task.fingerprint``; only the scheduler sees the noisy
+        view. Cached per task so repeated stage calls are consistent.
+        """
+        import dataclasses
+        tid = int(getattr(task, "task_id", id(task)))
+        cached = self._noisy_fp_cache.get(tid)
+        if cached is not None:
+            return cached
+        rng = np.random.default_rng(
+            (self.fingerprint_noise_seed * 1_000_003 + tid) & 0xFFFFFFFF
+        )
+        p = self.fingerprint_noise
+
+        def _perturb(arr: np.ndarray) -> np.ndarray:
+            if arr is None or arr.size == 0:
+                return arr
+            factor = 1.0 + p * rng.uniform(-1.0, 1.0, size=arr.shape)
+            return np.maximum(arr.astype(np.float32) * factor, 0.0).astype(np.float32)
+
+        beta_factor = 1.0 + p * float(rng.uniform(-1.0, 1.0))
+        noisy = dataclasses.replace(
+            fp,
+            mean_injection_trace=_perturb(fp.mean_injection_trace),
+            sample_measured_injection_trace=_perturb(fp.sample_measured_injection_trace),
+            global_burstiness=max(0.0, float(fp.global_burstiness) * beta_factor),
+        )
+        self._noisy_fp_cache[tid] = noisy
+        return noisy
 
     def _resolve_fingerprint(self, task: "Task")-> Optional[Fingerprint]:
         """Lazy-load a fingerprint from disk if the task only carries a path."""

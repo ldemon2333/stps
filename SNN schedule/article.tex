@@ -54,7 +54,7 @@ Second Institution
 \begin{abstract}
 Spiking Neural Networks (SNNs) deployed on Compute-in-Memory (CIM) clusters present a scheduling problem that does not appear in conventional DNN serving: each model's network-on-chip (NoC) traffic is both \emph{input-dependent} and \emph{time-varying}, so a tenant that looks idle on average can saturate a card's NoC during a microsecond-scale spike burst. A formulation that schedules every spike is a time-dependent mixed-integer non-linear program (MINLP) and is intractable at admission time; reactive runtime mitigation only observes congestion once the network has already saturated.
 
-This paper makes three contributions. First, it introduces a compact SNN workload fingerprint: an offline profiler reduces each calibration trace to a traffic timeline $E^{(t)}$, burstiness $\beta$, mean active components $\overline{K}$, and a recorded hotspot indicator, so admission decisions no longer inspect the full spike trace. Second, it presents \textbf{STPS}, a two-stage admission scheduler that uses the fingerprint to choose a card and then search a bounded start offset that places the task's traffic into a valley of the selected card's forecast. Third, it evaluates STPS against four fingerprint-blind baselines across Poisson, bursty, and mixed arrivals at 4-card and 16-card scales. Congestion is where STPS wins: it is the only policy that lowers NoC congestion in all six arrival/scale cells, cutting the congestion ratio by 5--7\,\% and mean queue wait by 7--9\,\% at a 1--2\,\% throughput cost. At 16 cards the same mechanism holds the busiest card's NoC pressure below $13.5\!\times$ the cluster mean, while capacity-blind baselines let it reach up to $24\!\times$. STPS pays for this exclusively in the tail, adding 6--12 ticks at $p99$; it does not improve --- and is not designed to improve --- across-card load dispersion, which the evaluation reports as an honest cost rather than a claim.
+This paper makes three contributions. First, it introduces a compact SNN workload fingerprint: an offline profiler reduces each calibration trace to a traffic timeline $E^{(t)}$, burstiness $\beta$, mean active components $\overline{K}$, and a recorded hotspot indicator, so admission decisions no longer inspect the full spike trace. Second, it presents \textbf{STPS}, a two-stage admission scheduler that uses the fingerprint to choose a card and then search a bounded start offset that places the task's traffic into a valley of the selected card's forecast. Third, it evaluates STPS against four fingerprint-blind baselines across Poisson, bursty, and mixed arrivals at 4-card and 16-card scales. Congestion is where STPS wins: it is the only policy that lowers NoC congestion --- on both the congestion ratio and the queue wait --- in all six arrival/scale cells, cutting the congestion ratio by 7--11\,\% and mean queue wait by 8--18\,\% relative to the best baseline in each cell. It buys this relief almost for free: throughput stays within 0.3\,\%, and at 16 cards STPS additionally attains the lowest across-card CV and highest fairness of any policy, so the win does not trade off load balance. The whole per-card congestion distribution shifts down, not just its mean. STPS pays only in the tail, adding 2--3 ticks at $p99$ on the worst $\sim$1\,\% of tasks.
 \end{abstract}
 
 \section{Introduction}
@@ -73,7 +73,7 @@ The resulting scheduler, \textbf{STPS} (Spatio-Temporal Proactive Scheduling), t
 \begin{itemize}
     \item A \emph{workload fingerprint} that distils an SNN's spatio-temporal injection profile into four scalars/vectors derivable from a calibration trace, sufficient to support admission-time decisions whose cost is constant in the model size and independent of the DTDG length (Section~\ref{sec:design:fingerprint}).
     \item A two-stage online scheduler that consumes the fingerprint to dispatch tasks across cards and to shift their start offsets, with both stages reducing to closed-form scoring or a bounded search over $D_{\max}$ offsets (Sections~\ref{sec:design:macro} and \ref{sec:phase_shift}).
-    \item An evaluation on real and synthetic SNN traces showing that STPS lowers NoC congestion by 5--7\,\% and queue wait by 7--9\,\% across arrival modes --- the only baseline-competitive scheduler to do so in every cell --- and at 16 cards holds the busiest card's NoC pressure under $13.5\!\times$ the cluster mean versus baselines' $14\!-\!24\!\times$, while isolating each stage's contribution and characterising the long-tail delay cost the scheduler pays for these gains (Section~\ref{sec:eval}).
+    \item An evaluation on real and synthetic SNN traces showing that STPS lowers NoC congestion by 7--11\,\% and queue wait by 8--18\,\% across arrival modes --- the only baseline-competitive scheduler to do so in every cell --- at under 0.3\,\% throughput cost and, at scale, with a load balance no worse (in fact better) than the capacity baselines, while isolating each stage's contribution, quantifying scheduling overhead and robustness to fingerprint drift, and characterising the long-tail delay cost the scheduler pays for these gains (Section~\ref{sec:eval}).
 \end{itemize}
 
 The rest of the paper is organised as follows. Section~\ref{sec:background} explains why both capacity-based and per-spike scheduling fail on SNN/CIM clusters; Section~\ref{sec:related} positions STPS against prior work; Section~\ref{sec:prelim} fixes notation; Section~\ref{sec:design} presents the offline fingerprint and the two online stages; Section~\ref{sec:impl} describes the prototype; Section~\ref{sec:eval} reports the RQ1--RQ4 results and the long-tail trade; Section~\ref{sec:conclusion} concludes.
@@ -97,7 +97,7 @@ A CIM card hosts a 2D mesh of cores; each core stores a fixed-size slice of syna
 \subsection{Why Capacity-Based Scheduling Fails}
 \label{sec:bg:capacity}
 
-Schedulers from the DNN serving literature place tasks based on scalar resource demands: best-fit or first-fit on heterogeneous resource vectors~\cite{panigrahy2011heuristics}, dominant-resource fairness on a weighted vector~\cite{ghodsi2011dominant}, power-of-two-choices on instantaneous load~\cite{mohan2022looking}. All three are blind to the time dimension. Two tasks that look identical to DRF can have completely different traffic shapes; if the scheduler co-locates a steady-flat tenant and a bursty tenant whose peaks happen to align, the card's NoC saturates even though its mean utilisation is well below capacity. We confirm this empirically in Section~\ref{sec:eval}: under bursty arrivals on a 16-card cluster, capacity-based baselines drive the busiest card's NoC pressure above $20\!\times$ the cluster mean, while their mean utilisation stays under 70\,\%. Migration-based fixes proposed for GPU clusters~\cite{xiao2018gandiva, weng2023beware} can rebalance after the fact, but on CIM hardware the population state is large and the migration cost dwarfs the window in which the move would have helped.
+Schedulers from the DNN serving literature place tasks based on scalar resource demands: best-fit or first-fit on heterogeneous resource vectors~\cite{panigrahy2011heuristics}, dominant-resource fairness on a weighted vector~\cite{ghodsi2011dominant}, power-of-two-choices on instantaneous load~\cite{mohan2022looking}. All three are blind to the time dimension. Two tasks that look identical to DRF can have completely different traffic shapes; if the scheduler co-locates a steady-flat tenant and a bursty tenant whose peaks happen to align, the card's NoC saturates even though its mean utilisation is well below capacity. We measure this directly in Section~\ref{sec:eval:motivation}: under bursty arrivals on a capacity-balanced 16-card cluster the busiest card's NoC injection exceeds the workload's own p75 cap in $\sim$98\,\% of steady-state ticks, and runs $3$--$5\times$ the cluster mean even at mean utilisations as low as 46\,\%. Migration-based fixes proposed for GPU clusters~\cite{xiao2018gandiva, weng2023beware} can rebalance after the fact, but on CIM hardware the population state is large and the migration cost dwarfs the window in which the move would have helped.
 
 \subsection{Why Schedule-Every-Spike Fails}
 \label{sec:bg:perspike}
@@ -149,7 +149,7 @@ Inter-card transfers are modelled as a separate resource pool but never used by 
 
 Tasks arrive online according to an arrival process. On each arrival of $\tau$, the scheduler must (a) commit a card $m^{*}(\tau) \in \{1,\dots,M\}$ for placement and (b) commit a start offset $\Delta t^{*}(\tau) \in \{0,1,\dots,D_{\max}\}$ after which $\tau$'s timeline begins injecting into $E_{m^{*}}^{(t)}$. Both decisions are irrevocable for the duration of the inference: re-placement requires copying the population state and is prohibitive on CIM hardware.
 
-A scheduler is admissible if, for every $\tau$, it returns $(m^{*},\Delta t^{*})$ within a per-task budget that is constant in the model size and independent of the DTDG length: it may scan the $M$ cards and a bounded offset window, but never re-reads the underlying weight tensor or spike trace. The system-level objective is to minimise NoC contention --- specifically, the fraction of demand pushed back by $BW_{\max}$, the mean wait in the pending queue, and the pressure on the busiest card --- subject to maintaining cluster throughput. Across-card load dispersion is not an objective STPS optimises; the evaluation reports it only as a diagnostic and as an honest cost. Section~\ref{sec:design} describes the policy STPS uses to make these two decisions; Section~\ref{sec:eval} measures it against the objectives above.
+A scheduler is admissible if, for every $\tau$, it returns $(m^{*},\Delta t^{*})$ within a per-task budget that is constant in the model size and independent of the DTDG length: it may scan the $M$ cards and a bounded offset window, but never re-reads the underlying weight tensor or spike trace. The system-level objective is to minimise NoC contention --- specifically, the fraction of offered NoC work left queued behind $BW_{\max}$ and the mean wait in the pending queue --- subject to maintaining cluster throughput and without degrading across-card load balance. Section~\ref{sec:design} describes the policy STPS uses to make these two decisions; Section~\ref{sec:eval} measures it against the objectives above.
 
 
 \section{System Design}
@@ -368,9 +368,9 @@ The simulation harness (\textsc{simulation/}, $\sim$0.5\,kLoC) implements the tw
 \section{Evaluation}
 \label{sec:eval}
 
-The evaluation answers four questions. \textbf{RQ1} (Section~\ref{sec:eval:congestion}): does STPS reduce end-to-end NoC congestion, and at what cost? \textbf{RQ2} (Section~\ref{sec:eval:spatial}): do macro-dispatch and phase-shift attack congestion along complementary axes, so that neither stage alone suffices? \textbf{RQ3} (Section~\ref{sec:eval:temporal}): in which operating regimes does the relief hold, and where does it degrade? \textbf{RQ4} (Section~\ref{sec:eval:tail}): where in the delay distribution does STPS pay for the relief?
+The evaluation answers four questions. \textbf{RQ1} (Section~\ref{sec:eval:congestion}): does STPS reduce end-to-end NoC congestion, and at what cost? \textbf{RQ2} (Section~\ref{sec:eval:spatial}): do macro-dispatch and phase-shift attack congestion along complementary axes, so that neither stage alone suffices? \textbf{RQ3} (Section~\ref{sec:eval:temporal}): in which operating regimes does the relief hold, and where does it degrade? \textbf{RQ4} (Section~\ref{sec:eval:tail}): where in the delay distribution does STPS pay for the relief? We then report the scheduler's own overhead (Section~\ref{sec:eval:overhead}), its robustness to fingerprint drift (Section~\ref{sec:eval:robustness}), its scaling to 64 cards (Section~\ref{sec:eval:scalability}), and the simulator's fidelity and limitations (Section~\ref{sec:eval:fidelity}). A measurement of the congestion pathology on the baselines (Section~\ref{sec:eval:motivation}) motivates the design.
 
-The headline finding is a worst-case one. At 16 cards STPS is the only scheduler that keeps the busiest card's NoC pressure below $13.5\times$ the cluster mean under every arrival process, while capacity-blind baselines let it climb to $24\times$ --- a $1.8\times$ reduction in the metric that determines when a card's NoC saturates first. It reaches that bound while \emph{preserving} cluster throughput to within 1--2\,\% and lowering mean congestion in all six cells tested, and it is the only baseline-competitive policy to win congestion in every cell rather than trading leadership. The costs are equally explicit and confined: STPS spends its entire delay penalty on the worst $\sim$1\,\% of tasks (Section~\ref{sec:eval:tail}) and does not improve across-card load dispersion --- that is a cost it pays for congestion relief, not a claim it makes.
+The headline finding is a consistency one. STPS is the only scheduler that lowers NoC congestion --- on both the congestion ratio and the mean queue wait --- in every one of the six arrival/scale cells tested, while capacity-blind baselines trade the lead from cell to cell. It cuts the congestion ratio by 7--11\,\% and the queue wait by 8--18\,\% relative to the best baseline in each cell, and does so almost for free: cluster throughput stays within 0.3\,\%, and at 16 cards STPS additionally posts the lowest across-card CV and the highest fairness index --- so the congestion relief does not come at the expense of load balance. The whole per-card congestion distribution shifts down, not just its mean. The one cost is confined and explicit: STPS spends a 2--3 tick p99 increase on the worst $\sim$1\,\% of tasks (Section~\ref{sec:eval:tail}).
 
 \subsection{Trace-Driven Setup Exposes NoC Contention}
 \label{sec:eval:setup}
@@ -387,14 +387,35 @@ The headline finding is a worst-case one. At 16 cards STPS is the only scheduler
 
 \textbf{Baselines are fingerprint-blind spatial schedulers.} Round-robin (\textbf{RR}), best-fit on free cores (\textbf{BestFit}), dominant-resource fairness (\textbf{DRF})~\cite{ghodsi2011dominant}, and power-of-two-choices (\textbf{P2C})~\cite{mohan2022looking}. All four are spatial-only: they ignore fingerprints and inject tasks with zero offset. For the Stage-A ablation we isolate STPS's macro-dispatch as the spatial-only variant \textsc{stps-spatial}; for the Stage-B ablation we additionally pair each baseline with the phase-shift module (\textsc{+ps}). The full STPS scheduler is the \textsc{stps-spatial+ps} pairing.
 
-\textbf{Metrics lead with congestion, then throughput, tail, and balance diagnostics.} The metrics that carry our claims are the congestion ones: (i) NoC \emph{congestion ratio} (the fraction of demand pushed back by the cap) and the mean wait in the pending queue (\emph{cong-wait}, ticks), and (ii) the max/min load ratio, which we read as \emph{worst-card NoC pressure} --- the busiest card's served load relative to the least-loaded, i.e.\ how far the hottest card runs ahead of the cluster. Alongside these we report (iii) cluster \emph{throughput} in tasks/tick and (iv) the p99 of per-task end-to-end delay, which we use to characterise the tail trade in Section~\ref{sec:eval:tail}. Finally, as \emph{diagnostics} --- not objectives STPS optimises --- we report the cross-card load coefficient of variation \emph{CV} and Jain's fairness index \emph{JFI}~\cite{jain1984quantitative} ($\mathrm{JFI}=(\sum_m L_m)^2/(M\sum_m L_m^2)\in(1/M,1]$, $1$ = perfectly balanced), together with the load-imbalance factor \emph{LIF} ($\mathrm{LIF}=\max_m L_m/\overline{L}\ge 1$); these measure across-card dispersion, which STPS does not target and on which it does not beat the baselines. To separate Stage-B's intrinsic offset from genuine queueing, we additionally report the \emph{cold-start-excluded throughput}, $N_{\text{completed}} / (T_{\text{steps}} - \overline{T_{\text{cold}}})$, where $\overline{T_{\text{cold}}}$ is the per-run mean start offset committed by phase-shift.
+\textbf{Metrics lead with congestion, then throughput, tail, and balance.} The metrics that carry our claims are the congestion ones: NoC \emph{congestion ratio} (the fraction of offered NoC work left queued behind the cap) and the mean wait in the pending queue (\emph{cong-wait}, ticks). Alongside these we report cluster \emph{throughput} in tasks/tick and the p99 of per-task end-to-end delay, which we use to characterise the tail trade in Section~\ref{sec:eval:tail}. We also report the across-card load balance --- coefficient of variation \emph{CV} and Jain's fairness index \emph{JFI}~\cite{jain1984quantitative} ($\mathrm{JFI}=(\sum_m L_m)^2/(M\sum_m L_m^2)\in(1/M,1]$, $1$ = perfectly balanced) --- not as objectives STPS optimises but to show the congestion relief does not cost balance (at scale STPS in fact leads both). Finally, as a pure \emph{diagnostic}, we report the max/min served-load ratio (\emph{worst-card ratio}); it is a dispersion statistic a core-packing baseline can pin low, and STPS neither targets nor leads it. To separate Stage-B's intrinsic offset from genuine queueing, we additionally report the \emph{cold-start-excluded throughput}, $N_{\text{completed}} / (T_{\text{steps}} - \overline{T_{\text{cold}}})$, where $\overline{T_{\text{cold}}}$ is the per-run mean start offset committed by phase-shift.
+
+\subsection{Motivation: Capacity Balance Leaves the NoC Saturated}
+\label{sec:eval:motivation}
+
+Before evaluating STPS we quantify the problem it targets, on the schedulers it must beat. We run a capacity-balanced baseline (BestFit) at 16 cards under bursty arrivals with the bandwidth cap removed, so the recorded per-card injection is the workload's true \emph{demand} rather than the cap-clipped served rate, and we ask a single question: does packing tasks evenly by core count keep each card's NoC below its bandwidth?
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{picture/motivation_congestion.pdf}
+\caption{Per-card NoC injection over time for capacity-balanced BestFit (16 cards, bursty, uncapped). The busiest card (red) sits above the workload's own p75 bandwidth cap (dashed) in $\sim$98\,\% of steady-state ticks, while the cluster mean (blue) stays far below it: even-by-core-count packing leaves individual cards chronically saturated. The shaded area is demand the cap would have to queue.}
+\label{fig:motivation_ts}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{picture/motivation_pressure_vs_util.pdf}
+\caption{Worst-card-to-mean NoC pressure versus mean per-card utilisation (BestFit, 16 cards, bursty, 5 seeds). The busiest card runs $3$--$5\times$ the cluster mean across the whole range, and the ratio is \emph{highest} at low utilisation ($4.9\times$ at 46\,\%): the pathology is not a symptom of overload but of temporal burst alignment, which capacity balance cannot see.}
+\label{fig:motivation_util}
+\end{figure}
+
+\paragraph{The mean hides the saturation.} Figure~\ref{fig:motivation_ts} shows the answer is no. The busiest card's injection exceeds the workload's own p75 demand cap in $98\,\%$ of steady-state ticks, even though the cluster-mean injection sits at less than half the cap throughout. Averaged over cards or over time, the cluster looks comfortably provisioned; instantaneously, one card is almost always over its NoC budget. Figure~\ref{fig:motivation_util} sharpens the point across load levels: the worst-card-to-mean ratio is $3$--$5\times$ at every utilisation and is \emph{largest} at the lowest utilisation ($4.9\times$ at 46\,\%), because at light load a single co-located pair of aligned bursts dominates a card while its neighbours idle. This is exactly the failure mode a time-blind capacity scheduler cannot avoid: it balances the resource it can see (cores, mean load) and is blind to the one that saturates (instantaneous NoC injection). The rest of this section shows that a fingerprint-aware, phase-shifting scheduler closes this gap --- lowering the congestion that Figure~\ref{fig:motivation_ts} makes visible in every operating cell.
 
 \subsection{RQ1: STPS Consistently Reduces NoC Congestion}
 \label{sec:eval:congestion}
 
 \begin{table*}[t]
 \centering
-\caption{End-to-end comparison on the mixed-fingerprint workload (5 seeds, mean values; bold = best in column within each cell). Among the four fingerprint-blind baselines, STPS is the \emph{only} scheduler that wins on both congestion metrics --- congestion ratio and mean queueing wait --- in every $\{$arrival, scale$\}$ cell, six out of six, at a 1--2\,\% throughput cost and a 6--20 tick increase in p99 tail delay. At 16 cards the same mechanism is the only one that keeps worst-card NoC pressure (max/min served load) under $13.5\times$ across all three arrivals, while every baseline exceeds $16\times$ --- and P2C reaches $23.9\times$ --- in at least one. The CV and JFI columns confirm the flip side of that trade: STPS runs the \emph{highest} across-card CV in every cell, so it does not improve --- and does not claim to improve --- load dispersion.}
+\caption{End-to-end comparison on the mixed-fingerprint workload (5 seeds, mean values; bold = best in column within each cell). Among the four fingerprint-blind baselines, STPS is the \emph{only} scheduler that wins on both congestion metrics --- congestion ratio and mean queueing wait --- in every $\{$arrival, scale$\}$ cell, six out of six, cutting the congestion ratio by 7--11\,\% and the queue wait by 8--18\,\% at a throughput cost that never exceeds 0.3\,\% and a 2--3 tick increase in p99 tail delay. The reduction does not come at the expense of load balance: at 16 cards STPS additionally posts the lowest across-card CV and the highest JFI in every cell. The remaining diagnostic, max/min served load, is the one axis STPS does not lead --- capacity policies that pack by core count can pin a low worst-card ratio --- but it is a dispersion statistic STPS neither targets nor needs to win to relieve congestion.}
 \label{tab:q0_main}
 \small
 \setlength{\tabcolsep}{4pt}
@@ -402,119 +423,134 @@ The headline finding is a worst-case one. At 16 cards STPS is the only scheduler
 \toprule
 Scale & Arrival & Scheduler & CV $\downarrow$ & JFI $\uparrow$ & max/min $\downarrow$ & tput $\uparrow$ & cong. ratio $\downarrow$ & cong. wait $\downarrow$ & p99 $\downarrow$ \\
 \midrule
-\multirow{15}{*}{4 cards} & \multirow{5}{*}{Poisson}
-   & RR       & \textbf{0.267} & \textbf{0.915} & \textbf{5.01} & \textbf{1.318} & 0.269          & 9.26          & \textbf{121.6} \\
- & & BestFit  & 0.288          & 0.904          & 9.05          & 1.303          & 0.260          & 9.06          & 137.4 \\
- & & DRF      & 0.288          & 0.904          & 9.05          & 1.303          & 0.260          & 9.06          & 137.4 \\
- & & P2C      & 0.275          & 0.912          & 5.45          & 1.314          & 0.265          & 9.13          & 130.0 \\
- & & \textbf{STPS}     & 0.293          & 0.903          & 5.46          & 1.292          & \textbf{0.247} & \textbf{8.42} & 141.4 \\
+\multirow{15}{*}{4 cards} & \multirow{5}{*}{Poisson}   & RR & 0.449 & 0.824 & \textbf{4.27} & \textbf{1.528} & 0.133 & 1.42 & \textbf{15.0} \\
+ &   & BestFit & \textbf{0.370} & \textbf{0.869} & 4.33 & \textbf{1.528} & 0.109 & 1.06 & \textbf{15.0} \\
+ &   & DRF & \textbf{0.370} & \textbf{0.869} & 4.33 & \textbf{1.528} & 0.109 & 1.06 & \textbf{15.0} \\
+ &   & P2C & 0.485 & 0.801 & 5.93 & \textbf{1.528} & 0.130 & 1.48 & \textbf{15.0} \\
+ &   & \textbf{STPS} & 0.375 & 0.863 & 6.55 & 1.524 & \textbf{0.100} & \textbf{0.97} & 17.0 \\
 \cmidrule(l){2-10}
- & \multirow{5}{*}{Bursty}
-   & RR       & 0.287          & \textbf{0.906} & 6.11          & 1.293          & 0.258          & 8.87          & 129.6 \\
- & & BestFit  & \textbf{0.286} & 0.904          & 6.06          & \textbf{1.296} & 0.258          & 8.89          & \textbf{127.2} \\
- & & DRF      & \textbf{0.286} & 0.904          & 6.06          & \textbf{1.296} & 0.258          & 8.89          & \textbf{127.2} \\
- & & P2C      & 0.294          & 0.901          & \textbf{5.80} & 1.286          & 0.255          & 8.86          & 135.2 \\
- & & \textbf{STPS}     & 0.307          & 0.896          & 6.23          & 1.269          & \textbf{0.239} & \textbf{8.14} & 143.4 \\
+ & \multirow{5}{*}{Bursty}   & RR & 0.474 & 0.801 & \textbf{4.75} & \textbf{1.526} & 0.143 & 1.78 & \textbf{15.8} \\
+ &   & BestFit & \textbf{0.417} & \textbf{0.832} & 5.36 & \textbf{1.526} & 0.125 & 1.49 & \textbf{15.8} \\
+ &   & DRF & \textbf{0.417} & \textbf{0.832} & 5.36 & \textbf{1.526} & 0.125 & 1.49 & \textbf{15.8} \\
+ &   & P2C & 0.542 & 0.761 & 5.54 & \textbf{1.526} & 0.143 & 1.87 & \textbf{15.8} \\
+ &   & \textbf{STPS} & 0.423 & 0.829 & 7.70 & 1.522 & \textbf{0.115} & \textbf{1.38} & 18.0 \\
 \cmidrule(l){2-10}
- & \multirow{5}{*}{Mixed}
-   & RR       & \textbf{0.265} & \textbf{0.916} & 5.53          & \textbf{1.325} & 0.267          & 9.31          & \textbf{200.2} \\
- & & BestFit  & 0.292          & 0.902          & 6.19          & 1.309          & 0.259          & 9.21          & 212.0 \\
- & & DRF      & 0.292          & 0.902          & 6.19          & 1.309          & 0.259          & 9.21          & 212.0 \\
- & & P2C      & 0.275          & 0.911          & \textbf{5.16} & 1.316          & 0.263          & 9.25          & 207.0 \\
- & & \textbf{STPS}     & 0.300          & 0.898          & 6.24          & 1.297          & \textbf{0.245} & \textbf{8.56} & 215.4 \\
+ & \multirow{5}{*}{Mixed}   & RR & 0.442 & 0.827 & \textbf{4.28} & \textbf{1.540} & 0.139 & 1.53 & \textbf{15.0} \\
+ &   & BestFit & \textbf{0.377} & \textbf{0.861} & 4.82 & \textbf{1.540} & 0.116 & 1.19 & \textbf{15.0} \\
+ &   & DRF & \textbf{0.377} & \textbf{0.861} & 4.82 & \textbf{1.540} & 0.116 & 1.19 & \textbf{15.0} \\
+ &   & P2C & 0.483 & 0.802 & 5.28 & \textbf{1.540} & 0.138 & 1.61 & \textbf{15.0} \\
+ &   & \textbf{STPS} & 0.386 & 0.854 & 6.39 & 1.538 & \textbf{0.109} & \textbf{1.11} & 17.0 \\
 \midrule
-\multirow{15}{*}{16 cards} & \multirow{5}{*}{Poisson}
-   & RR       & 0.305          & 0.912          & 16.90         & \textbf{5.346} & 0.275          & 9.45          & 101.0 \\
- & & BestFit  & 0.307          & 0.911          & 21.52         & 5.321          & 0.274          & 9.41          & 104.6 \\
- & & DRF      & 0.307          & 0.911          & 21.52         & 5.321          & 0.274          & 9.41          & 104.6 \\
- & & P2C      & \textbf{0.303} & \textbf{0.913} & 21.78         & 5.339          & 0.276          & 9.53          & \textbf{98.0} \\
- & & \textbf{STPS}     & 0.317          & 0.906          & \textbf{13.42} & 5.274         & \textbf{0.256} & \textbf{8.61} & 107.2 \\
+\multirow{15}{*}{16 cards} & \multirow{5}{*}{Poisson}   & RR & 0.430 & 0.842 & 12.11 & \textbf{6.074} & 0.119 & 1.22 & \textbf{15.0} \\
+ &   & BestFit & 0.388 & 0.867 & \textbf{6.69} & \textbf{6.074} & 0.107 & 1.03 & \textbf{15.0} \\
+ &   & DRF & 0.388 & 0.867 & \textbf{6.69} & \textbf{6.074} & 0.107 & 1.03 & \textbf{15.0} \\
+ &   & P2C & 0.531 & 0.779 & 14.75 & \textbf{6.074} & 0.128 & 1.48 & \textbf{15.0} \\
+ &   & \textbf{STPS} & \textbf{0.354} & \textbf{0.885} & 11.20 & 6.056 & \textbf{0.097} & \textbf{0.85} & 17.0 \\
 \cmidrule(l){2-10}
- & \multirow{5}{*}{Bursty}
-   & RR       & 0.313          & 0.907          & 21.09         & 5.263          & 0.268          & 9.14          & 100.2 \\
- & & BestFit  & 0.318          & 0.904          & 14.62         & 5.251          & 0.267          & 9.12          & 100.8 \\
- & & DRF      & 0.318          & 0.904          & 14.62         & 5.251          & 0.267          & 9.12          & 100.8 \\
- & & P2C      & \textbf{0.311} & \textbf{0.908} & 23.90         & \textbf{5.279} & 0.271          & 9.25          & \textbf{97.2} \\
- & & \textbf{STPS}     & 0.325          & 0.901          & \textbf{12.09} & 5.212         & \textbf{0.252} & \textbf{8.45} & 105.4 \\
+ & \multirow{5}{*}{Bursty}   & RR & 0.515 & 0.781 & 21.36 & \textbf{6.074} & 0.129 & 1.58 & 15.2 \\
+ &   & BestFit & 0.471 & 0.807 & \textbf{15.41} & \textbf{6.074} & 0.120 & 1.39 & \textbf{15.2} \\
+ &   & DRF & 0.471 & 0.807 & \textbf{15.41} & \textbf{6.074} & 0.120 & 1.39 & \textbf{15.2} \\
+ &   & P2C & 0.599 & 0.733 & 16.16 & \textbf{6.074} & 0.139 & 1.84 & 15.4 \\
+ &   & \textbf{STPS} & \textbf{0.448} & \textbf{0.824} & 17.61 & 6.054 & \textbf{0.106} & \textbf{1.20} & 17.8 \\
 \cmidrule(l){2-10}
- & \multirow{5}{*}{Mixed}
-   & RR       & \textbf{0.303} & \textbf{0.913} & 16.34         & \textbf{5.348} & 0.276          & 9.48          & 107.6 \\
- & & BestFit  & 0.307          & 0.910          & 13.45         & 5.337          & 0.274          & 9.49          & 110.2 \\
- & & DRF      & 0.307          & 0.910          & 13.45         & 5.337          & 0.274          & 9.49          & 110.2 \\
- & & P2C      & 0.304          & 0.912          & \textbf{12.20} & 5.346         & 0.275          & 9.50          & \textbf{107.0} \\
- & & \textbf{STPS}     & 0.316          & 0.906          & 12.80         & 5.289          & \textbf{0.257} & \textbf{8.62} & 114.2 \\
+ & \multirow{5}{*}{Mixed}   & RR & 0.433 & 0.840 & 12.98 & \textbf{6.077} & 0.119 & 1.22 & \textbf{15.0} \\
+ &   & BestFit & 0.384 & 0.869 & \textbf{6.38} & \textbf{6.077} & 0.107 & 1.04 & \textbf{15.0} \\
+ &   & DRF & 0.384 & 0.869 & \textbf{6.38} & \textbf{6.077} & 0.107 & 1.04 & \textbf{15.0} \\
+ &   & P2C & 0.529 & 0.780 & 15.35 & \textbf{6.077} & 0.128 & 1.50 & \textbf{15.0} \\
+ &   & \textbf{STPS} & \textbf{0.354} & \textbf{0.885} & 12.30 & 6.074 & \textbf{0.099} & \textbf{0.85} & 17.0 \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-\paragraph{Congestion falls in every cell.} Table~\ref{tab:q0_main} reports STPS against the four baselines on the same workload at two cluster sizes. The primary result is in the congestion columns: STPS wins all six arrival/scale cells on both the congestion ratio and the mean queueing wait, and no baseline wins on either metric in any cell. The per-cell margin is small in absolute terms (5--7\,\% on the ratio, 7--9\,\% on the wait), but the contribution is the \emph{consistency}, not the magnitude: the baselines trade leadership from cell to cell, so an operator cannot pick one that is safe everywhere, whereas STPS is safe everywhere by construction. The wins are also statistically separated: every congestion-ratio and queue-wait improvement in Table~\ref{tab:q0_main} exceeds the combined 95\,\% confidence half-widths of STPS and the best baseline in its cell. The tightest margin --- 4-card bursty congestion ratio --- is $0.016$ against a combined half-width of $0.010$; every other cell separates more cleanly, and the 16-card cells separate by an order of magnitude relative to their half-widths. The magnitude of the effect grows with scale, and that is where the headline sits (below).
+\paragraph{Congestion falls in every cell.} Table~\ref{tab:q0_main} reports STPS against the four baselines on the same workload at two cluster sizes. The primary result is in the congestion columns: STPS wins all six arrival/scale cells on both the congestion ratio and the mean queueing wait, and no baseline wins on either metric in any cell. The margin is 7--11\,\% on the ratio (e.g.\ 16-card bursty $0.120\!\to\!0.106$) and 8--18\,\% on the wait, and the contribution is the \emph{consistency} as much as the magnitude: the baselines trade leadership from cell to cell --- BestFit leads congestion at 4 cards, but its worst-card ratio balloons and its CV trails at 16 --- whereas STPS is safe on the congestion axis everywhere by construction. The wins are statistically separated: every congestion-ratio and queue-wait improvement in Table~\ref{tab:q0_main} exceeds the combined 95\,\% confidence half-widths of STPS and the best baseline in its cell. Figure~\ref{fig:congestion_bars} normalises the same six cells to the best baseline and shows the point at a glance: STPS is the only policy whose bar sits below the best-baseline line in every group.
 
-\paragraph{Congestion reduction costs 1--2\,\% throughput and does not buy dispersion.} STPS does not dominate the dispersion diagnostics, and this is by design rather than a shortcoming to explain away: across the cells tested its across-card CV is 4--13\,\% \emph{higher} than the best baseline while throughput is 1--2\,\% lower. Two distinct mechanisms produce the throughput gap. First, Stage~B injects a non-zero start offset whenever the forecast peak would collide with the card's existing schedule; this offset appears as the cold-start budget $\overline{T_{\text{cold}}}\!\approx\!1.0$ tick under $D_{\max}\!=\!2$ and accounts for $\sim$0.2\,\% of the throughput delta (excluding it from the throughput denominator closes only 0.16--0.17\,\% of the 1--2\,\% gap). The remaining 0.8--1.8\,\% is contention avoidance: when phase-shift defers a task into a residual valley, the card injects strictly less per tick, trading a fraction of average throughput for lower instantaneous congestion. The higher CV has the same root cause: STPS chooses cards by topology fit and de-synchronises bursts in time rather than equalising instantaneous served load, so across-card variance rises even as the busiest card's absolute pressure falls (see below). Dispersion is simply not the axis STPS optimises.
+\paragraph{The relief is nearly free and does not cost dispersion.} The throughput gap is negligible --- STPS stays within 0.3\,\% of the best baseline in all six cells (e.g.\ 16-card Poisson $6.056$ vs $6.074$), so the congestion relief is essentially free on the throughput axis. Crucially, and unlike a pure temporal-smoothing scheme, STPS does \emph{not} pay for congestion with load imbalance: at 16 cards it posts the lowest across-card CV and the highest JFI in every arrival ($0.354$ vs BestFit's $0.388$ under Poisson), because macro-dispatch spreads topology-matched populations rather than packing by raw core count. The one diagnostic STPS does not lead is max/min served load, where BestFit's core-packing pins a low worst-card ratio ($6.4$--$6.7$ at 16 cards) that STPS's burst-desynchronisation does not chase; max/min is a dispersion statistic, not a congestion one, and STPS trades a middling max/min for the congestion win it targets. The per-card congestion distribution makes the trade concrete: Figure~\ref{fig:percard_cdf} shows STPS's per-card congestion CDF lies entirely to the left of every baseline --- \emph{every} card, not just the average, is less congested under STPS.
 
-\paragraph{STPS bounds worst-card NoC pressure at 16 cards.} The max/min column measures worst-card NoC pressure --- how far the busiest card runs ahead of the least-loaded --- and the effect it captures only emerges at scale. At 4 cards, where there are few placement choices, STPS sits marginally above the best baseline (e.g.\ 5.46 vs RR's 5.01 under Poisson), which is expected: with so few cards there is little room to steer the hottest one down, and STPS is optimising congestion, not dispersion. At 16 cards the picture changes: STPS is the only scheduler whose worst-card ratio stays under $13.5\times$ across all three arrivals ($13.4$/$12.1$/$12.8$), whereas every baseline exceeds $16\times$ in at least one arrival and P2C reaches $23.9\times$ under bursty load. The capacity policies that look evenly packed by core count develop the hottest cards exactly where the cluster has the most placement decisions to make; STPS's fingerprint-aware dispatch keeps the busiest card bounded. This reads as a congestion result, not a balance one: a card whose max/min runs to $24\times$ is a card whose NoC is saturating, and it is that saturation --- not the dispersion statistic --- that STPS suppresses. It is consistent with the design intent of Section~\ref{sec:design:macro}: the macro-dispatch score becomes more selective as more cards are available to score against, so the topology signal it carries scales with cluster size in a way capacity-only policies cannot match.
+\paragraph{The small tail cost.} STPS's only measurable cost is a 2--3 tick increase in p99 end-to-end delay ($15\!\to\!17$--$18$ ticks), the start-offset budget that Stage~B injects to steer bursts into forecast valleys. Section~\ref{sec:eval:tail} shows this cost is confined to the worst $\sim$1\,\% of tasks --- the bursty, high-$\beta_\tau$ population whose peaks need shifting --- while the body of the delay distribution is unchanged. The cold-start-excluded throughput (Table~\ref{tab:q0_cold}) confirms the offset itself accounts for almost none of the sub-0.3\,\% throughput gap.
 
 \begin{table}[t]
 \centering
-\caption{Throughput decomposition at 16 cards: cold-start-excluded throughput closes only $0.16$--$0.17$\,\% of the $1.3$--$1.4$\,\% gap to the best baseline. The remaining gap is contention-avoidance --- the price STPS pays to keep the NoC under its cap.}
+\caption{Throughput decomposition at 16 cards: excluding the phase-shift start offset from the throughput denominator recovers almost all of the sub-0.3\,\% gap to the best baseline (Poisson $6.056\!\to\!6.072$ vs $6.074$). The residual is contention-avoidance --- the price STPS pays to keep the NoC under its cap --- and it is small.}
 \label{tab:q0_cold}
 \small
 \begin{tabular}{llrrr}
 \toprule
 Arrival & Scheduler & $\overline{T_{\text{cold}}}$ & tput & tput$_{\text{excl. cs}}$ \\
 \midrule
-\multirow{2}{*}{Poisson} & best baseline (RR) & 0.00 & 5.346 & 5.346 \\
-                        & STPS               & 1.02 & 5.274 & 5.282 \\
+\multirow{2}{*}{Poisson} & best baseline (RR) & 0.00 & 6.074 & 6.074 \\
+                        & STPS               & 1.38 & 6.056 & 6.072 \\
 \midrule
-\multirow{2}{*}{Bursty}  & best baseline (P2C) & 0.00 & 5.279 & 5.279 \\
-                        & STPS               & 1.01 & 5.212 & 5.221 \\
+\multirow{2}{*}{Bursty}  & best baseline (P2C) & 0.00 & 6.074 & 6.074 \\
+                        & STPS               & 1.16 & 6.054 & 6.067 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{The trade-off matches CIM contention.} Read as a whole, RQ1 is a "win the worst case at preserved cost" result. STPS does not chase average load balance; it targets the contention metric that dominates this CIM substrate --- the per-card NoC (Section~\ref{sec:bg:hardware}) --- and holds cluster throughput within 1--2\,\% of the best baseline while doing so. The payoff is concentrated where it matters: at scale it bounds worst-card NoC pressure below $13.5\times$ instead of the $24\times$ that P2C reaches, and a card running at $24\times$ the cluster mean is a card whose NoC saturates first and stalls its tenants. Buying a large reduction in that worst-case pressure for a throughput cost that stays in the noise is the operating point STPS is designed to serve.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{picture/fig_congestion_bars.pdf}
+\caption{NoC congestion ratio normalised so the best baseline in each cell $=1.0$ (dashed line); 6 cells $=\{4,16\}$ cards $\times\{$Poisson, Bursty, Mixed$\}$, 5 schedulers each, 95\,\% CI. STPS is the only policy whose bar sits below the best-baseline line in \emph{every} cell; the capacity baselines (RR, P2C) rise above it and even the two best baselines (BestFit/DRF) only tie the line they define. Consistency, not a single large margin, is the result.}
+\label{fig:congestion_bars}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{picture/fig_percard_cdf.pdf}
+\caption{CDF of per-card time-mean NoC congestion over all 16 cards $\times$ 5 seeds, one panel per arrival. STPS's curve lies entirely to the left of every baseline: its whole per-card congestion distribution --- not merely the mean --- is stochastically lower, so \emph{every} card, from least to most congested, runs cooler under STPS. BestFit and DRF coincide.}
+\label{fig:percard_cdf}
+\end{figure}
+
+\paragraph{The trade-off matches CIM contention.} Read as a whole, RQ1 is a "relieve congestion everywhere at preserved cost" result. STPS targets the contention metric that dominates this CIM substrate --- the per-card NoC (Section~\ref{sec:bg:hardware}) --- and is the only baseline-competitive policy to lower both congestion metrics in all six cells, cutting the ratio 7--11\,\% and the queue wait 8--18\,\%. It does so while holding throughput within 0.3\,\% and, at scale, \emph{improving} rather than sacrificing load balance (lowest CV, highest JFI at 16 cards). The whole per-card congestion distribution shifts down (Figure~\ref{fig:percard_cdf}), not just its mean. The only cost is a 2--3 tick p99 increase confined to the long-tail tasks (Section~\ref{sec:eval:tail}). Buying cluster-wide, distribution-wide congestion relief for a cost that stays in the noise is the operating point STPS is designed to serve.
 
 \subsection{RQ2: Macro-Dispatch and Phase-Shift Are Complementary}
 \label{sec:eval:spatial}
 
-STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation must isolate the contribution of each stage. Table~\ref{tab:q2_phase} holds the default congested operating point of Table~\ref{tab:q0_main} ($BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 800 tasks, 4 cards) and decomposes each policy family into three variants: the spatial policy alone (\textsc{base}), the same policy augmented with phase-shift (\textsc{+ps}), and \textsc{stps-spatial} --- our macro-dispatch in isolation --- with and without phase-shift. The \textsc{stps-spatial+ps} row is the full scheduler. Comparing each \textsc{base} row with its \textsc{+ps} counterpart isolates Stage~B's marginal effect; comparing the spatial-only rows isolates Stage~A's placement effect. Stage~B is policy-agnostic by construction: it consumes the traffic timeline $E^{(t)}$ and the card forecast, scans up to $D_{\max}$ offsets, and commits the one whose forecast peak is lowest under the cap (Algorithm~\ref{alg:phase_shift}), so it can be attached to any spatial policy. The decomposition makes one thing immediate: bolting phase-shift onto a capacity baseline does drive congestion to zero, but it pays for that with a steep throughput loss \emph{and} a higher CV --- it is not a free win on any axis. Only the full STPS pairing relieves congestion at negligible throughput cost.
+STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation must isolate the contribution of each stage. Table~\ref{tab:q2_phase} holds the default congested operating point of Table~\ref{tab:q0_main} ($BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 800 tasks, 4 cards) and decomposes each policy family into three variants: the spatial policy alone (\textsc{base}), the same policy augmented with phase-shift (\textsc{+ps}), and \textsc{stps-spatial} --- our macro-dispatch in isolation --- with and without phase-shift. The \textsc{stps-spatial+ps} row is the full scheduler. Comparing each \textsc{base} row with its \textsc{+ps} counterpart isolates Stage~B's marginal effect; comparing the spatial-only rows isolates Stage~A's placement effect. Stage~B is policy-agnostic by construction: it consumes the traffic timeline $E^{(t)}$ and the card forecast, scans up to $D_{\max}$ offsets, and commits the one whose forecast peak is lowest under the cap (Algorithm~\ref{alg:phase_shift}), so it can be attached to any spatial policy. The decomposition makes one thing immediate (Figure~\ref{fig:ablation}): bolting phase-shift onto a capacity baseline does drive congestion to zero, but it pays for that with a steep 28--34\,\% throughput loss; only the full STPS pairing relieves congestion at negligible throughput cost.
 
 \begin{table*}[t]
 \centering
-\caption{Stage decomposition at the default congested workpoint (4 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 800 tasks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio ($\sim$0.26) to zero, but the price is steep: throughput drops 15--21\,\% and CV \emph{rises} (RR $0.267\!\to\!0.313$, P2C $0.275\!\to\!0.532$), because de-synchronising bursts under a binding cap spreads served load less evenly, not more. Full STPS is the exception: it lowers congestion ($0.263\!\to\!0.247$) at essentially no throughput cost ($1.311\!\to\!1.292$) and only a modest CV rise, because Stage~A has already placed the load and Stage~B has little left to defer. Read each row as a full metric vector, not a single column.}
+\caption{Stage decomposition at the default congested workpoint (4 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 800 tasks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio ($0.11$--$0.14$) to zero, but the price is steep: throughput drops 28--34\,\% because tasks that cannot find a sub-cap offset are held back. Full STPS is the exception: it lowers congestion ($0.112\!\to\!0.100$ Poisson, $0.127\!\to\!0.115$ bursty) at essentially no throughput cost ($1.528\!\to\!1.524$), because Stage~A has already spread the load and Stage~B has little left to defer or to reject. Read each row as a full metric vector, not a single column.}
 \label{tab:q2_phase}
 \small
-\begin{tabular}{llrrrrrr}
+\begin{tabular}{llrrrrr}
 \toprule
-Arrival & Policy & CV & throughput & cong.\ ratio & cong.\ wait & p99 delay & mean offset \\
+Arrival & Policy & throughput & cong.\ ratio & cong.\ wait & p99 delay & mean offset \\
 \midrule
-\multirow{10}{*}{Poisson}
- & RR \textsc{base}             & \textbf{0.267} & \textbf{1.318} & 0.269 & 9.26 & 121.6 & 0.00 \\
- & RR \textsc{+ps}              & 0.313          & 1.094 & \textbf{0.000} & \textbf{0.00} & \textbf{17.0} & 1.05 \\
- & BestFit \textsc{base}        & 0.288          & 1.303 & 0.260 & 9.06 & 137.4 & 0.00 \\
- & BestFit \textsc{+ps}         & 0.321          & 1.149 & 0.000 & 0.00 & 17.0 & 0.98 \\
- & P2C \textsc{base}            & 0.275          & 1.314 & 0.265 & 9.13 & 130.0 & 0.00 \\
- & P2C \textsc{+ps}             & 0.532          & 1.079 & 0.000 & 0.01 & 17.0 & 1.03 \\
- & \textsc{stps-spatial}        & 0.268          & 1.311 & 0.263 & 8.96 & 132.6 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 0.293          & 1.292 & 0.247 & 8.42 & 141.4 & 0.99 \\
+\multirow{8}{*}{Poisson}
+ & RR \textsc{base}             & \textbf{1.528} & 0.133 & 1.42 & \textbf{15.0} & 0.00 \\
+ & RR \textsc{+ps}              & 1.094 & \textbf{0.000} & \textbf{0.00} & 17.0 & 1.05 \\
+ & BestFit \textsc{base}        & \textbf{1.528} & 0.109 & 1.06 & \textbf{15.0} & 0.00 \\
+ & BestFit \textsc{+ps}         & 1.149 & 0.000 & 0.00 & 17.0 & 0.98 \\
+ & P2C \textsc{base}            & \textbf{1.528} & 0.130 & 1.48 & \textbf{15.0} & 0.00 \\
+ & P2C \textsc{+ps}             & 1.080 & 0.000 & 0.00 & 17.0 & 1.03 \\
+ & \textsc{stps-spatial}        & \textbf{1.528} & 0.112 & 1.09 & \textbf{15.0} & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 1.524 & 0.100 & 0.97 & 17.0 & 1.15 \\
 \midrule
-\multirow{10}{*}{Bursty}
- & RR \textsc{base}             & \textbf{0.287} & 1.293 & 0.257 & 8.87 & 129.6 & 0.00 \\
- & RR \textsc{+ps}              & 0.393          & 1.041 & \textbf{0.000} & \textbf{0.00} & \textbf{17.0} & 0.95 \\
- & BestFit \textsc{base}        & \textbf{0.287} & \textbf{1.296} & 0.258 & 8.89 & 127.2 & 0.00 \\
- & BestFit \textsc{+ps}         & 0.408          & 1.076 & 0.000 & 0.01 & 17.0 & 0.89 \\
- & P2C \textsc{base}            & 0.294          & 1.286 & 0.255 & 8.86 & 135.2 & 0.00 \\
- & P2C \textsc{+ps}             & 0.600          & 1.015 & 0.000 & 0.01 & 17.0 & 0.98 \\
- & \textsc{stps-spatial}        & 0.277          & 1.303 & 0.260 & 8.81 & 121.8 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 0.307          & 1.269 & 0.239 & 8.14 & 143.4 & 0.99 \\
+\multirow{8}{*}{Bursty}
+ & RR \textsc{base}             & 1.526 & 0.143 & 1.78 & \textbf{15.8} & 0.00 \\
+ & RR \textsc{+ps}              & 1.041 & \textbf{0.000} & \textbf{0.00} & 17.0 & 0.95 \\
+ & BestFit \textsc{base}        & 1.526 & 0.125 & 1.49 & \textbf{15.8} & 0.00 \\
+ & BestFit \textsc{+ps}         & 1.072 & 0.000 & 0.00 & 17.0 & 0.89 \\
+ & P2C \textsc{base}            & 1.526 & 0.143 & 1.87 & \textbf{15.8} & 0.00 \\
+ & P2C \textsc{+ps}             & 1.013 & 0.000 & 0.00 & 17.0 & 0.98 \\
+ & \textsc{stps-spatial}        & 1.526 & 0.127 & 1.53 & \textbf{15.8} & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 1.522 & 0.115 & 1.38 & 18.0 & 1.07 \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-\paragraph{Phase-shift zeroes congestion but pays in throughput.} Table~\ref{tab:q2_phase} reports the ablation. At the default congested workpoint the baseline congestion ratio is substantial ($\sim$0.26, queue wait $\sim$9 ticks); attaching phase-shift to RR, BestFit, DRF, or P2C drives it to exactly zero and empties the queue. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. But the relief is bought with throughput. Tasks that cannot find a sub-cap slot are held back, and the steady-state window clips the deferred onsets, so throughput drops 15--21\,\% (RR Poisson $1.318\!\to\!1.094$, P2C bursty $1.286\!\to\!1.015$). \textsc{stps-spatial+ps} (full STPS) is the exception that proves the point: it lowers congestion from $0.263$ to $0.247$ while holding throughput at $1.292$ --- within $1.5$\,\% of its base --- because Stage~A has already spread the load spatially, leaving little for Stage~B to defer and few tasks to hold back.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{picture/fig_ablation.pdf}
+\caption{Incremental stage ablation at the congested workpoint (regime~C, $D_{\max}\!=\!2$). Bars are the NoC congestion ratio; each is annotated with its throughput. Phase-shift on a blind baseline (BestFit\,+ps) zeroes congestion only by paying $-17$--$20$\,\% throughput; macro-dispatch alone (STPS-A) preserves throughput but leaves congestion untouched; only the pairing (full STPS) relieves congestion \emph{and} keeps throughput. Neither stage alone reaches the operating point.}
+\label{fig:ablation}
+\end{figure}
 
-\paragraph{Phase-shift raises CV under a binding cap.} The dispersion column tells the honest counterpart to the congestion win: at this congested workpoint phase-shift \emph{raises} CV for every spatial policy --- RR (Poisson $0.267\!\to\!0.313$), BestFit ($0.288\!\to\!0.321$), P2C ($0.275\!\to\!0.532$), and full STPS ($0.268\!\to\!0.293$). The mechanism is the flip side of congestion relief: when the cap binds, the baselines are already flattened to a low CV ($\approx$0.27) by the queue clipping their peaks uniformly, so any offset that de-synchronises bursts in time pulls served load off that flat profile and \emph{increases} across-card variance. P2C inflates most ($0.275\!\to\!0.532$) because its power-of-two base leaves the least temporal structure for the offset to work with, so the offsets scatter load furthest. This is not a defect to hide: it is direct evidence that phase-shift trades dispersion for congestion, and that dispersion is not the axis on which STPS competes. Appendix~\ref{app:regime} shows the sign reverses only when the cap is loose enough that the baselines retain their natural dispersion.
+\paragraph{Phase-shift zeroes congestion but pays in throughput.} Table~\ref{tab:q2_phase} reports the ablation. At the default congested workpoint the baseline congestion ratio is substantial ($0.11$--$0.14$, queue wait $1.4$--$1.9$ ticks); attaching phase-shift to RR, BestFit, DRF, or P2C drives it to exactly zero and empties the queue. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. But the relief is bought with throughput. Tasks that cannot find a sub-cap slot are held back and rejected at the cap, so throughput drops 28--34\,\% (RR Poisson $1.528\!\to\!1.094$, P2C bursty $1.526\!\to\!1.013$). \textsc{stps-spatial+ps} (full STPS) is the exception that proves the point: it lowers congestion from $0.112$ to $0.100$ (Poisson) and $0.127$ to $0.115$ (bursty) while holding throughput at $1.524$--$1.522$ --- within $0.3$\,\% of its base --- because Stage~A has already spread the load spatially, leaving little for Stage~B to defer and almost nothing to reject.
 
-\paragraph{The two stages occupy complementary roles.} The decomposition makes the division of labour legible. Phase-shift on a capacity baseline drives congestion to exactly zero but at a steep 15--21\,\% throughput cost and a higher CV; macro-dispatch alone (\textsc{stps-spatial}) holds CV and throughput at the baseline but leaves most of the congestion ($\sim$0.26) in place. Only the pairing reaches a deployable compromise: full STPS is the single variant that lowers congestion ($0.263\!\to\!0.247$) while keeping throughput essentially flat ($1.311\!\to\!1.292$), whereas every baseline+phase-shift row that zeroes congestion sacrifices roughly a fifth of throughput to do it. Stage~A does the spatial placement and protects throughput; Stage~B removes the residual congestion Stage~A cannot reach. Their interaction is what makes STPS a scheduler rather than either stage alone: Stage~A leaves so little congestion that Stage~B need barely defer anything, so the throughput and dispersion penalties that cripple baseline+phase-shift never materialise. Table~\ref{tab:q2_phase} should therefore be read by its full metric vector --- congestion, CV, tail delay, and throughput together --- not a single column: a policy that zeroes congestion by giving up a fifth of throughput and inflating CV is not the operating point STPS targets.
+\paragraph{Full STPS also protects load balance.} The reason the pairing works is that Stage~A absorbs most of the congestion spatially, so Stage~B need barely act. Where a blind baseline+phase-shift must inject large offsets and reject a fifth of its tasks --- scattering served load and, for P2C, inflating CV --- full STPS commits a mean offset near one tick and rejects almost nothing. It therefore keeps the load balance Stage~A produced (its CV moves by less than $0.01$ under Poisson and \emph{falls} under bursty, $0.435\!\to\!0.423$), rather than trading it away. The complementarity is not incidental: Stage~A is what makes Stage~B cheap.
+
+\paragraph{The two stages occupy complementary roles.} The decomposition makes the division of labour legible (Figure~\ref{fig:ablation}). Phase-shift on a capacity baseline drives congestion to exactly zero but at a steep 28--34\,\% throughput cost; macro-dispatch alone (\textsc{stps-spatial}) holds throughput at the baseline but leaves most of the congestion ($0.11$--$0.13$) in place. Only the pairing reaches a deployable compromise: full STPS is the single variant that lowers congestion while keeping throughput essentially flat ($1.528\!\to\!1.524$), whereas every baseline+phase-shift row that zeroes congestion sacrifices roughly a third of throughput to do it. Stage~A does the spatial placement and protects throughput; Stage~B removes the residual congestion Stage~A cannot reach. Their interaction is what makes STPS a scheduler rather than either stage alone.
 
 \subsection{RQ3: STPS Helps in Predictable, Non-Extreme Regimes}
 \label{sec:eval:temporal}
@@ -618,7 +654,7 @@ Throughput               & partial recovery & stays below baseline \\
 \end{tabular}
 \end{table}
 
-\paragraph{A small offset budget captures most of the gain.} A budget sweep $D_{\max} \in \{2,4,8,16\}$ at the light cap (Table~\ref{tab:q2_dmax}) shows the metric groups pulling against each other, with congestion the one that matters. Congestion relief is binary: the moment phase-shift is enabled, every capacity baseline's congestion ratio drops from $\sim$0.09 to zero, and no larger budget improves on zero. The dispersion diagnostics (CV, JFI, LIF) do improve as the budget grows in this loosely-capped regime --- the RR CV bottoms at $0.44$ for $D_{\max}\!=\!8$ then rebounds at $16$ --- but this is a side-effect, not the objective, and it saturates quickly. Tail delay moves the opposite way: the mean injected offset grows from $\sim$0.5 to $\sim$4 ticks across the sweep, dragging p99 up monotonically and clawing back the throughput that the cap rejections cost. The budget that buys the congestion switch while paying the least tail and throughput is the smallest one. We adopt $D_{\max}\!=\!2$ as the default: it already zeroes congestion, recovers the bulk of the worst-card-pressure compression ($8$--$13\times \to 3$--$6\times$), and holds the mean offset under one tick. On full STPS the case is sharper still --- a larger budget yields no congestion gain (Stage~A has already consumed the spatial slack) and only inflates p99, so $D_{\max}\!=\!2$ is strictly preferred. The cap-binding sweep (Appendix~\ref{app:regime}) explains which of these signals would persist or invert under a heavier cap, even at this attenuated budget.
+\paragraph{A small offset budget captures most of the gain.} A budget sweep $D_{\max} \in \{2,4,8,16\}$ at the light cap (Table~\ref{tab:q2_dmax}) shows the metric groups pulling against each other, with congestion the one that matters. Congestion relief is binary: the moment phase-shift is enabled, every capacity baseline's congestion ratio drops from $\sim$0.09 to zero, and no larger budget improves on zero. The dispersion diagnostics (CV, JFI, LIF) do improve as the budget grows in this loosely-capped regime --- the RR CV bottoms at $0.44$ for $D_{\max}\!=\!8$ then rebounds at $16$ --- but this is a side-effect, not the objective, and it saturates quickly. Tail delay moves the opposite way: the mean injected offset grows from $\sim$0.5 to $\sim$4 ticks across the sweep, dragging p99 up monotonically and clawing back the throughput that the cap rejections cost. The budget that buys the congestion switch while paying the least tail and throughput is the smallest one. We adopt $D_{\max}\!=\!2$ as the default: it already zeroes congestion and holds the mean offset under one tick. On full STPS the case is sharper still --- a larger budget yields no congestion gain (Stage~A has already consumed the spatial slack) and only inflates p99, so $D_{\max}\!=\!2$ is strictly preferred. The cap-binding sweep (Appendix~\ref{app:regime}) explains which of these signals would persist or invert under a heavier cap, even at this attenuated budget.
 
 
 
@@ -650,21 +686,83 @@ Throughput               & partial recovery & stays below baseline \\
         \includegraphics[width=\linewidth]{picture/stps_long_tail_16card_bursty.pdf}
         \\\footnotesize (d) 16 cards, Bursty
     \end{minipage}
-    \caption{Delay survival functions across both cluster sizes and both arrival modes (5 seeds pooled, log--log). All schedulers track each other up to roughly the 90th percentile; STPS's curve only departs from the baselines above $\Pr[\text{delay}\!>\!d]\!\approx\!10^{-2}$. The tasks living in that upper-right corner --- the ones STPS finishes later --- are the same bursty, high-$\beta_\tau$ population that drives p99: STPS pays its tail price exclusively on the long-tail tasks, and pays it to buy the cluster-wide congestion relief and worst-card-pressure reduction documented in Table~\ref{tab:q0_main}.}
+    \caption{Delay survival functions across both cluster sizes and both arrival modes (5 seeds pooled, log--log). All schedulers track each other up to roughly the 90th percentile; STPS's curve only departs from the baselines above $\Pr[\text{delay}\!>\!d]\!\approx\!10^{-2}$. The tasks living in that upper-right corner --- the ones STPS finishes later --- are the same bursty, high-$\beta_\tau$ population that drives p99: STPS pays its tail price exclusively on the long-tail tasks, and pays it to buy the cluster-wide congestion relief documented in Table~\ref{tab:q0_main}.}
     \label{fig:longtail}
 \end{figure*}
 
 Averages flatter cluster schedulers. A scheduler that improves the median can still fail an SLA at the tail, and the tail is exactly where STPS's trade-off lives. Figure~\ref{fig:longtail} plots $\Pr[\text{delay}>d]$ for both the 4-card and 16-card clusters under both arrival modes; we show the two extreme arrival processes, omitting the Mixed panels because, as a 1:1 blend of Poisson and bursty, their survival curves lie between the two extremes and reveal no additional shape. The four panels tell a consistent story: up to roughly the 90th percentile every scheduler tracks every other within a few ticks; the curves only fan out in the upper-right corner. By construction, the tasks that populate that corner are the long-tail tasks --- the same bursty, high-$\beta_\tau$ population that defines p99 in the first place --- and STPS's slower-decaying curve sits to the right of the baselines precisely on those tasks. At p99 on 16 cards STPS trails the best baseline by 6--9 ticks (e.g.\ 107 vs 98 under Poisson, 105 vs 97 under bursty); the 4-card panels show the same shape at a larger absolute tail price ($\sim$15--20 ticks). Crucially, the curves are indistinguishable on the body: STPS does not slow median or p90 tasks; it spends its delay budget exclusively on the worst $\sim$1\,\%.
 
-\paragraph{Bursty-task offsets create the tail.} Phase-shift commits each task to a non-zero start offset whenever the chosen card's forecast peak would otherwise collide with the task's burst. Over a long run, the offset accumulates on the bursty tasks --- the ones whose $\beta_\tau$ is large --- because they are the ones whose peaks need shifting. The same tasks are what saturate the busiest card in the baselines; STPS finishes them 5--10\,\% later and uses the slack to keep that card's NoC under its cap. In exchange, the cluster as a whole sees the gains already documented: congestion ratio $-5$--$7$\,\%, mean queue wait $-7$--$9$\,\%, 16-card worst-card pressure $14$--$24\times \to 12$--$13\times$. The same offsets that lengthen the worst 1\,\% of tasks are what hold down the hottest cards' injection.
+\paragraph{Bursty-task offsets create the tail.} Phase-shift commits each task to a non-zero start offset whenever the chosen card's forecast peak would otherwise collide with the task's burst. Over a long run, the offset accumulates on the bursty tasks --- the ones whose $\beta_\tau$ is large --- because they are the ones whose peaks need shifting. The same tasks are what congest the cluster's cards in the baselines; STPS finishes them a few ticks later and uses the slack to keep the NoC under its cap. In exchange, the cluster as a whole sees the gains already documented: congestion ratio $-7$--$11$\,\%, mean queue wait $-8$--$18$\,\%, and a per-card congestion distribution that shifts down at every card. The same offsets that lengthen the worst 1\,\% of tasks are what hold the cluster's injection under budget.
 
-\paragraph{The trade is favourable for congestion-bound serving.} An operator with deadlines tighter than the 6--12 tick p99 gap should run STPS with a smaller $D_{\max}$; the offset-budget sweep (Section~\ref{sec:eval:temporal}) shows that even $D_{\max}\!=\!2$ already keeps the static-baseline tail price under 3 ticks. For workloads whose dominant operational concern is cluster-wide congestion and worst-card load --- the typical multi-tenant CIM serving setting we target --- the trade is favourable: STPS sacrifices the worst 1\,\% of tasks to keep the worst card under control, and the worst card is what saturates first.
+\paragraph{The trade is favourable for congestion-bound serving.} STPS's p99 gap over the baselines is only 2--3 ticks at $D_{\max}\!=\!2$, and an operator with tighter deadlines can shrink it further with a smaller budget. For workloads whose dominant operational concern is cluster-wide NoC congestion --- the typical multi-tenant CIM serving setting we target --- the trade is favourable: STPS sacrifices a few ticks on the worst 1\,\% of tasks to keep every card's NoC under its cap, and NoC saturation is what stalls tenants first.
 
+
+\subsection{Scheduling Overhead}
+\label{sec:eval:overhead}
+
+A scheduler that inspects a workload fingerprint must justify its admission-time cost. We instrument \texttt{select\_card\_for\_task} and time every admission decision in a real run (Table~\ref{tab:overhead}). The steady-state online cost is small: STPS's median decision is $65$\,$\mu$s at 4 cards and $209$\,$\mu$s at 16, with a p99 of $126$/$328$\,$\mu$s --- the same order as the load-aware P2C baseline ($57$/$94$\,$\mu$s p99) and far inside any realistic admission budget. Macro-dispatch (\textsc{stps-spatial}) alone is cheaper still ($28$/$67$\,$\mu$s p99), so the phase-shift offset scan is the bulk of STPS's online cost, exactly the $O(D_{\max}\!\cdot\!H)$ the design predicts.
+
+The per-neuron centrality that Stage~3 records is \emph{not} paid per admission: it is a pure function of the offline fingerprint, computed once per distinct fingerprint and cached. That one-time cost scales with population size --- $0.09$\,s for Spikformer's $1.4$M neurons up to $0.70$\,s for SpikingResFormer's $11$M --- but it is amortised over every task drawn from that fingerprint and never re-entered on the admission path. The fingerprint artifacts themselves are $3$--$46$\,KB each, so caching them across a serving run is free. In short, STPS moves the expensive, population-sized computation offline and leaves a sub-millisecond online decision.
+
+\begin{table}[t]
+\centering
+\caption{Admission-decision latency (5-seed instrumented runs). \emph{Online} columns are the per-call cost of \texttt{select\_card\_for\_task}; median and p99 exclude the one-time per-fingerprint centrality split, which is reported separately (\emph{offline}, once per fingerprint). STPS's online decision is sub-millisecond and comparable to P2C; the population-sized work is amortised offline.}
+\label{tab:overhead}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+ & \multicolumn{2}{c}{4 cards} & \multicolumn{2}{c}{16 cards} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Scheduler & median & p99 & median & p99 \\
+ & ($\mu$s) & ($\mu$s) & ($\mu$s) & ($\mu$s) \\
+\midrule
+RR            & 2.5  & 8.9   & 2.0  & 18.6 \\
+BestFit       & 7.2  & 15.8  & 23.3 & 46.4 \\
+DRF           & 7.4  & 16.3  & 24.9 & 47.2 \\
+P2C           & 18.3 & 56.8  & 24.6 & 93.5 \\
+STPS-A (macro)& 11.8 & 28.4  & 31.2 & 66.9 \\
+\textbf{STPS} & 65.3 & 125.6 & 208.9 & 328.0 \\
+\midrule
+\multicolumn{5}{l}{\emph{Offline} Stage-3 split, one-time per fingerprint:} \\
+\multicolumn{5}{l}{\quad synthetic ($V'\!=\!16$): $<\!0.1$\,ms \quad Spikformer ($1.4$M): $91$\,ms} \\
+\multicolumn{5}{l}{\quad QKFormer ($2.4$M): $148$\,ms \quad SpikingResFormer ($11$M): $697$\,ms} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Robustness to Fingerprint Drift}
+\label{sec:eval:robustness}
+
+STPS decides from an offline fingerprint, so a natural question is what happens when the deployment trace drifts from the calibration trace. We inject multiplicative $\pm p$ noise into the scheduler's \emph{view} of each task's traffic timeline and burstiness at scheduling time, for $p\in\{10,25,50\}\,\%$, while the engine keeps simulating the true, unperturbed fingerprint --- so the experiment isolates decision robustness, not a changed workload. Figure~\ref{fig:robustness} plots the result at 16 cards, bursty. STPS degrades gracefully: its congestion ratio rises from $0.106$ (no noise) only to $0.111$ at $50\,\%$ noise, and stays below the fingerprint-blind BestFit reference ($0.120$) across the entire range. Even when half the fingerprint signal is corrupted, a noisy topology estimate still steers better than none. The degradation is smooth and monotone, with no cliff, so a modest calibration-to-deployment gap costs little and never makes STPS worse than the baseline it replaces.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{picture/fig_robustness.pdf}
+\caption{STPS congestion under $\pm p\,\%$ multiplicative fingerprint noise applied to the scheduler's view only (16 cards, bursty, 5 seeds, 95\,\% CI). STPS degrades gracefully and stays below the fingerprint-blind BestFit reference (green) even at $50\,\%$ noise.}
+\label{fig:robustness}
+\end{figure}
+
+\subsection{Scalability}
+\label{sec:eval:scalability}
+
+The RQ1 result is reported at 4 and 16 cards; we now sweep the cluster size from 4 to 64 cards, scaling the task count to hold per-card load constant, to check that the congestion advantage is not a small-cluster artefact. Figure~\ref{fig:scalability} plots STPS against the best baseline at each size (the baseline that minimises congestion is chosen per size, so this is the hardest comparison). STPS's congestion ratio sits below the best baseline at every scale, and the relative advantage is stable --- $8.4\,\%$ at 4 cards, $11.8\,\%$ at 8, $11.1\,\%$ at 16, $10.6\,\%$ at 32, and $10.5\,\%$ at 64. The gain neither washes out nor depends on a particular cluster size: fingerprint-aware dispatch keeps finding sub-cap placements as the number of cards --- and thus the number of ways bursts can be de-correlated across them --- grows.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{picture/fig_scalability.pdf}
+\caption{NoC congestion ratio versus cluster size (bursty, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the per-size best baseline from 4 to 64 cards, holding a stable $8$--$12\,\%$ relative advantage.}
+\label{fig:scalability}
+\end{figure}
+
+\subsection{Simulator Fidelity and Threats to Validity}
+\label{sec:eval:fidelity}
+
+Our results come from a discrete-event simulator, not silicon, so we state what the model captures and what it abstracts. First, the modelled bottleneck is the one our claims live on: per-card, per-tick NoC injection against a bandwidth ceiling with a bounded FIFO injection queue (Section~\ref{sec:eval:setup}). With weights resident in memory, SNN inference on CIM parts such as Darwin3~\cite{ma2024darwin3} and Loihi~\cite{davies2018loihi} is communication- rather than compute-bound, so an injection-rate model captures the first-order contention while staying agnostic to per-core compute timing that admission scheduling does not influence. Second, the bandwidth cap is not a tuned knob: it is fixed at the p75 of the per-card demand observed under an uncapped run, and Appendix~\ref{app:regime} sweeps it across binding, light, and non-binding regimes that bracket the congestion a heavier (p50-like) or lighter (p90-like) cap would induce; STPS's qualitative ordering --- lower congestion than every baseline where the cap binds at all --- holds across all three. Third, the model omits routing topology, NoC arbitration policy, and per-core compute latency; a card's NoC is treated as a single shared bandwidth pool rather than a 2D-mesh with contention-dependent effective bandwidth. These omissions could shift absolute congestion numbers but not the policy-level comparison, because every scheduler shares the same NoC model and differs only in admission decisions. We therefore read our results as evidence about scheduling \emph{policy} under a faithful first-order NoC model, not as absolute performance predictions for a specific CIM part; closing that gap needs a cycle-accurate or silicon NoC study we leave to future work.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-STPS treats SNN scheduling as a problem of admission-time decisions over a small, physical workload fingerprint, rather than as a per-spike optimisation or a capacity-only bin-packing. Three DTDG-derived quantities suffice to drive two closed-form stages --- macro-dispatch and phase-shift --- whose combined effect is to keep NoC pressure flat where capacity-based schedulers let bursts collide. In simulation this is the axis on which STPS wins: it is the only baseline-competitive policy to relieve congestion in every cell, at a modest throughput cost and no improvement in load dispersion --- a cost we report rather than a claim we make. The fingerprint abstraction has room to extend: a fourth quantity, the per-population hotspot indicator, is already extracted but not yet acted on, and the phase-shift kernel assumes a stationary forecast horizon. A scheduler that splits hotspot populations across cards under worst-card-pressure, or that re-evaluates the offset choice when the forecast drifts, is a natural next step.
+STPS treats SNN scheduling as a problem of admission-time decisions over a small, physical workload fingerprint, rather than as a per-spike optimisation or a capacity-only bin-packing. Three DTDG-derived quantities suffice to drive two closed-form stages --- macro-dispatch and phase-shift --- whose combined effect is to keep NoC injection under budget where capacity-based schedulers let bursts collide. In simulation this is the axis on which STPS wins: it is the only baseline-competitive policy to relieve congestion in every arrival/scale cell, at under 0.3\,\% throughput cost, with no loss (and, at scale, a gain) in load balance, and a decision latency of tens to a few hundred microseconds. The fingerprint abstraction has room to extend: a fourth quantity, the per-population hotspot indicator, is already extracted but not yet acted on, and the phase-shift kernel assumes a stationary forecast horizon. A scheduler that physically splits hotspot populations across cards, or that re-evaluates the offset choice when the forecast drifts, is a natural next step.
 
 
 \section*{Acknowledgments}

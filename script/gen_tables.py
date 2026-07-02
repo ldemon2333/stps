@@ -335,8 +335,8 @@ def main() -> int:
         "",
         "## Provenance & validation",
         "",
-        "Regenerated 2026-06-09 on the current codebase "
-        "(`/root/stps/.venv/bin/python`, 5 seeds, steps=512).",
+        "Regenerated on the current codebase under the bounded-FIFO NoC model "
+        "(`/usr/bin/python3`, 5 seeds, steps=512).",
         "",
         "| Table | Source | vs. `article.tex` |",
         "|---|---|---|",
