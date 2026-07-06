@@ -1,0 +1,9 @@
+metric,value
+exceed_frac_mean,0.9774
+worst_over_mean_pressure,3.092
+cap_p75,1422015.2
+util_0.463,4.924
+util_0.692,3.867
+util_0.924,3.092
+util_1.164,2.530
+util_1.390,2.119

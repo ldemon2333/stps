@@ -1,0 +1,8 @@
+fingerprint,neurons,split_ms
+synthetic_flat.npz,16,0.01
+synthetic_pulse_t8.npz,16,0.01
+synthetic_pulse_t16.npz,16,0.0
+synthetic_bursty.npz,16,0.0
+spikformer_cifar10.npz,1449984,90.88
+qkformer_cifar10.npz,2369536,147.5
+spikingresformer_ti_imagenet.npz,11180992,697.08

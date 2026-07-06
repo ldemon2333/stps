@@ -13,7 +13,12 @@ overleaf
 .env
 
 # --- Generated outputs ---
-data/
+# Experiment result CSVs (summaries + aggregated raw that back the paper tables
+# and the supplementary experiments) are tracked for reproducibility. Only the
+# transient per-simulation byproducts and large regenerable raw dumps stay
+# ignored.
+data/**/_raw/
+data/**/*_task_delays.csv
 results/
 log/
 plot/*.png
