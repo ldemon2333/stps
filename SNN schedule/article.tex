@@ -157,7 +157,11 @@ A scheduler is admissible if, for every $\tau$, it returns $(m^{*},\Delta t^{*})
 
 \begin{table*}[!t]
 \centering
-\caption{End-to-end comparison on the mixed-fingerprint workload (16 cards, 5 seeds, mean values; bold = best in column). STPS consistently improves cluster-wide load balance, posting the lowest across-card CV and LIF and the highest JFI in every cell. This balance is achieved alongside significant congestion relief: STPS is the only scheduler that wins on both congestion ratio and mean queueing wait in every arrival mode, cutting the congestion ratio by 7--11\,\% and queue wait by 8--18\,\% relative to the best baseline, with a throughput cost under 0.3\,\%.}
+\caption{End-to-end comparison on the mixed-fingerprint workload (16 cards, bold = best in column). 
+STPS consistently improves cluster-wide load balance, posting the lowest across-card CV and LIF and the highest JFI in every cell. 
+STPS is the only scheduler that wins on both congestion ratio and mean queueing wait in every arrival mode, 
+cutting the congestion ratio by 7--11\,\% and queue wait by 8--18\,\% relative to the best baseline, 
+with a throughput cost under 0.3\,\%.}
 \label{tab:q0_main}
 \footnotesize
 \setlength{\tabcolsep}{5pt}
@@ -472,28 +476,9 @@ We evaluate STPS using a discrete-event simulator (Section~\ref{sec:impl}) that 
 \subsection{Q1: STPS Improves Load Balance while Reducing Congestion}
 \label{sec:eval:balance}
 
-\paragraph{Load balance is the primary advantage.} Table~\ref{tab:q0_main} reports the per-arrival results, and Table~\ref{tab:balance} aggregates the whole load distribution across arrivals. At the default 16-card scale, STPS has the lowest CV and LIF and the highest JFI in every arrival cell; aggregated over Poisson, bursty, and mixed arrivals, it also leads every balance metric: CV $0.385$ vs BestFit/DRF $0.415$ ($7.2\,\%$ lower), JFI $0.865$ vs $0.848$, LIF $1.609$ vs $1.666$, $t$CV $0.420$ vs $0.447$, and $t$LIF $1.525$ vs $1.568$. The per-arrival CV margin is statistically separated in the underlying 5-seed runs: Poisson $0.354\!\pm\!0.004$ vs BestFit $0.388\!\pm\!0.002$, Bursty $0.448\!\pm\!0.013$ vs $0.471\!\pm\!0.009$, and Mixed $0.354\!\pm\!0.006$ vs $0.384\!\pm\!0.005$. The mechanism is the one macro-dispatch is designed for: with 16 candidate cards, the fingerprint score has enough placement choices to separate correlated bursts that capacity packing would otherwise co-locate.
+\paragraph{Load balance is the primary advantage.} Table~\ref{tab:q0_main} reports the per-arrival results. At the default 16-card scale, STPS has the lowest CV and LIF and the highest JFI in every arrival cell. The per-arrival CV margin is statistically separated in the underlying 5-seed runs: Poisson $0.354\!\pm\!0.004$ vs BestFit $0.388\!\pm\!0.002$, Bursty $0.448\!\pm\!0.013$ vs $0.471\!\pm\!0.009$, and Mixed $0.354\!\pm\!0.006$ vs $0.384\!\pm\!0.005$. STPS also improves LIF in each arrival mode: $1.522$ vs RR's $1.533$ in Poisson, $1.789$ vs BestFit/DRF's $1.879$ in Bursty, and $1.516$ vs RR's $1.533$ in Mixed. The mechanism is the one macro-dispatch is designed for: with 16 candidate cards, the fingerprint score has enough placement choices to separate correlated bursts that capacity packing would otherwise co-locate.
 
-\begin{table}[t]
-\centering
-\caption{Across-card load-balance metrics (16 cards, 5 seeds, averaged over Poisson/Bursty/Mixed; bold = best in column). CV/LIF/$t$CV/$t$LIF are lower-is-better, JFI higher-is-better. STPS leads every balance metric, and the CV margin is significant (non-overlapping 95\,\% intervals in all three arrivals). Load-aware P2C is the weakest balancer.}
-\label{tab:balance}
-\small
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{lrrrrr}
-\toprule
-Scheduler & CV $\downarrow$ & JFI $\uparrow$ & LIF $\downarrow$ & $t$CV $\downarrow$ & $t$LIF $\downarrow$ \\
-\midrule
-RR & 0.459 & 0.821 & 1.650 & 0.484 & 1.551 \\
-BestFit & 0.415 & 0.848 & 1.666 & 0.447 & 1.568 \\
-DRF & 0.415 & 0.848 & 1.666 & 0.447 & 1.568 \\
-P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
-\textbf{STPS} & \textbf{0.385} & \textbf{0.865} & \textbf{1.609} & \textbf{0.420} & \textbf{1.525} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The gain is not reactive load awareness.} P2C, the only baseline that samples instantaneous load, is the weakest balancer in Table~\ref{tab:balance} (CV $0.553$, JFI $0.764$). Choosing among currently light cards reacts after hot spots form; it does not anticipate the traffic timeline that creates them. STPS instead places by topology and burstiness before the collision, which is why its advantage appears both in time-averaged metrics and in time-domain metrics ($t$CV and $t$LIF), the quantities closest to what the NoC sees.
+\paragraph{The gain is not reactive load awareness.} P2C, the only baseline that samples instantaneous load, is the weakest balancer in Table~\ref{tab:q0_main}: it has the highest CV and lowest JFI in every arrival mode, and its LIF is also worse than the capacity baselines. Choosing among currently light cards reacts after hot spots form; it does not anticipate the traffic timeline that creates them. STPS instead places by topology and burstiness before the collision, which is why its advantage appears in the across-card metrics closest to what the NoC sees.
 
 \paragraph{Concurrent congestion relief.} Along with improved balance, STPS simultaneously delivers significant NoC congestion relief. It is the only scheduler that wins all arrival cells on both the congestion ratio and the mean queueing wait, while maintaining near-identical throughput. The congestion ratio falls by 7--11\,\% and the queueing wait by 8--18\,\% relative to the best baseline. Crucially, the throughput gap is negligible (within 0.3\,\%), showing that the congestion relief is essentially free on the throughput axis. Figure~\ref{fig:percard_cdf} shows the entire per-card congestion distribution shifts left: \emph{every} card, not just the average, is less congested under STPS.
 
@@ -713,7 +698,7 @@ The simulator, the offline DTDG fingerprint extractor, and the experimental harn
 \label{app:metrics}
 
 Let $x_m$ be the total served load on card $m$ over the measurement window of a run, and let
-$\bar{x}=\frac{1}{M}\sum_{m=1}^{M}x_m$. The across-card balance metrics used in Tables~\ref{tab:q0_main} and \ref{tab:balance} are
+$\bar{x}=\frac{1}{M}\sum_{m=1}^{M}x_m$. The across-card balance metrics used in Table~\ref{tab:q0_main} are
 \begin{align}
 \mathrm{CV} &= \frac{\sqrt{\frac{1}{M}\sum_{m=1}^{M}(x_m-\bar{x})^2}}{\bar{x}}, \\
 \mathrm{JFI} &= \frac{\left(\sum_{m=1}^{M}x_m\right)^2}{M\sum_{m=1}^{M}x_m^2}, \\
