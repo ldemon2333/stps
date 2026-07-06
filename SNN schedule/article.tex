@@ -368,7 +368,7 @@ The simulation harness (\textsc{simulation/}, $\sim$0.5\,kLoC) implements the tw
 \section{Evaluation}
 \label{sec:eval}
 
-The evaluation answers four questions. \textbf{RQ1} (Section~\ref{sec:eval:congestion}): does STPS reduce end-to-end NoC congestion, and at what cost? \textbf{RQ2} (Section~\ref{sec:eval:spatial}): do macro-dispatch and phase-shift attack congestion along complementary axes, so that neither stage alone suffices? \textbf{RQ3} (Section~\ref{sec:eval:temporal}): in which operating regimes does the relief hold, and where does it degrade? \textbf{RQ4} (Section~\ref{sec:eval:tail}): where in the delay distribution does STPS pay for the relief? We then report the scheduler's own overhead (Section~\ref{sec:eval:overhead}), its robustness to fingerprint drift (Section~\ref{sec:eval:robustness}), its scaling to 64 cards (Section~\ref{sec:eval:scalability}), and the simulator's fidelity and limitations (Section~\ref{sec:eval:fidelity}). A measurement of the congestion pathology on the baselines (Section~\ref{sec:eval:motivation}) motivates the design.
+The evaluation answers four questions. \textbf{RQ1} (Section~\ref{sec:eval:congestion}): does STPS reduce end-to-end NoC congestion, and at what cost? \textbf{RQ2} (Section~\ref{sec:eval:spatial}): do macro-dispatch and phase-shift attack congestion along complementary axes, so that neither stage alone suffices? \textbf{RQ3} (Section~\ref{sec:eval:temporal}): in which operating regimes does the relief hold, and where does it degrade? \textbf{RQ4} (Section~\ref{sec:eval:tail}): where in the delay distribution does STPS pay for the relief? We then report the load-balance comparison across scale (Section~\ref{sec:eval:balance}), the scheduler's own overhead (Section~\ref{sec:eval:overhead}), its robustness to fingerprint drift (Section~\ref{sec:eval:robustness}), its scaling to 64 cards (Section~\ref{sec:eval:scalability}), and the simulator's fidelity and limitations (Section~\ref{sec:eval:fidelity}). A measurement of the congestion pathology on the baselines (Section~\ref{sec:eval:motivation}) motivates the design.
 
 The headline finding is a consistency one. STPS is the only scheduler that lowers NoC congestion --- on both the congestion ratio and the mean queue wait --- in every one of the six arrival/scale cells tested, while capacity-blind baselines trade the lead from cell to cell. It cuts the congestion ratio by 7--11\,\% and the queue wait by 8--18\,\% relative to the best baseline in each cell, and does so almost for free: cluster throughput stays within 0.3\,\%, and at 16 cards STPS additionally posts the lowest across-card CV and the highest fairness index --- so the congestion relief does not come at the expense of load balance. The whole per-card congestion distribution shifts down, not just its mean. The one cost is confined and explicit: STPS spends a 2--3 tick p99 increase on the worst $\sim$1\,\% of tasks (Section~\ref{sec:eval:tail}).
 
@@ -696,6 +696,42 @@ Averages flatter cluster schedulers. A scheduler that improves the median can st
 
 \paragraph{The trade is favourable for congestion-bound serving.} STPS's p99 gap over the baselines is only 2--3 ticks at $D_{\max}\!=\!2$, and an operator with tighter deadlines can shrink it further with a smaller budget. For workloads whose dominant operational concern is cluster-wide NoC congestion --- the typical multi-tenant CIM serving setting we target --- the trade is favourable: STPS sacrifices a few ticks on the worst 1\,\% of tasks to keep every card's NoC under its cap, and NoC saturation is what stalls tenants first.
 
+
+\subsection{Load Balance Improves with Cluster Scale}
+\label{sec:eval:balance}
+
+RQ1 reported, cell by cell, that STPS's congestion relief does not cost load balance. This subsection makes the load-balance comparison the primary object and reads it across scale. We use dispersion metrics that summarise the \emph{whole} load distribution rather than a single worst card: the across-card coefficient of variation (CV), Jain's fairness index (JFI), and the load-imbalance factor (LIF, mean-normalised peak), each in both a time-averaged form (computed on per-card mean load) and a time-domain form ($t$CV, $t$LIF, computed per tick then averaged, which reflects the instantaneous dispersion the NoC actually experiences). Table~\ref{tab:balance} reports all five, averaged over the three arrival processes.
+
+\begin{table}[t]
+\centering
+\caption{Across-card load-balance metrics (5 seeds, averaged over Poisson/Bursty/Mixed; bold = best in column within each scale block). CV/LIF/$t$CV/$t$LIF are lower-is-better, JFI higher-is-better. At 4 cards STPS is statistically tied with the strongest capacity balancer (BestFit/DRF) --- ahead on LIF and $t$LIF, marginally behind on CV/JFI. At 16 cards STPS leads \emph{every} balance metric, and the CV margin is significant (non-overlapping 95\,\% intervals in all three arrivals). Load-aware P2C is the weakest balancer at both scales.}
+\label{tab:balance}
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llrrrrr}
+\toprule
+Scale & Scheduler & CV $\downarrow$ & JFI $\uparrow$ & LIF $\downarrow$ & $t$CV $\downarrow$ & $t$LIF $\downarrow$ \\
+\midrule
+\multirow{5}{*}{4 cards} & RR & 0.455 & 0.818 & 1.594 & 0.535 & 1.593 \\
+ & BestFit & \textbf{0.388} & \textbf{0.854} & 1.513 & \textbf{0.497} & 1.567 \\
+ & DRF & \textbf{0.388} & \textbf{0.854} & 1.513 & \textbf{0.497} & 1.567 \\
+ & P2C & 0.503 & 0.788 & 1.628 & 0.570 & 1.603 \\
+ & \textbf{STPS} & 0.395 & 0.849 & \textbf{1.488} & 0.501 & \textbf{1.537} \\
+\midrule
+\multirow{5}{*}{16 cards} & RR & 0.459 & 0.821 & 1.650 & 0.484 & 1.551 \\
+ & BestFit & 0.415 & 0.848 & 1.666 & 0.447 & 1.568 \\
+ & DRF & 0.415 & 0.848 & 1.666 & 0.447 & 1.568 \\
+ & P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
+ & \textbf{STPS} & \textbf{0.385} & \textbf{0.865} & \textbf{1.609} & \textbf{0.420} & \textbf{1.525} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{At small scale STPS ties the best balancer.} At 4 cards the capacity policies BestFit and DRF are the strongest balancers on the time-averaged CV and JFI, and STPS sits within noise of them ($0.395$ vs $0.388$ CV; $0.849$ vs $0.854$ JFI) --- a gap under $2\,\%$ that is inside the 5-seed confidence intervals. On the peak-sensitive metrics STPS is already ahead: it posts the lowest LIF ($1.488$ vs $1.513$) and the lowest time-domain $t$LIF ($1.537$ vs $1.567$), because de-synchronising bursts lowers each card's peak-to-mean even when the mean load is similar. With only four cards there is little spatial freedom to exploit, so topology-aware placement neither wins nor loses the dispersion contest --- consistent with the Stage-A-in-isolation sweeps of Section~\ref{sec:eval:temporal}.
+
+\paragraph{At scale STPS leads every balance metric.} At 16 cards the ordering flips cleanly: STPS attains the best value on all five metrics --- CV $0.385$ (vs BestFit $0.415$), JFI $0.865$ (vs $0.848$), LIF $1.609$ (vs $1.666$), and both time-domain terms ($t$CV $0.420$ vs $0.447$, $t$LIF $1.525$ vs $1.568$). The CV advantage is statistically separated: STPS's upper 95\,\% bound lies below BestFit's lower bound in every individual arrival (Poisson $0.354\!\pm\!0.004$ vs $0.388\!\pm\!0.002$; Bursty $0.448\!\pm\!0.013$ vs $0.471\!\pm\!0.009$; Mixed $0.354\!\pm\!0.006$ vs $0.384\!\pm\!0.005$). The mechanism is the one macro-dispatch was designed for: as the number of cards grows, the fingerprint score has more placements to discriminate among, so topology-matched dispatch spreads correlated bursts across cards that capacity packing would have co-located. The time-domain metrics confirm the win is not an artefact of time-averaging --- the instantaneous per-tick dispersion, which is what the NoC sees, is lowest under STPS too.
+
+\paragraph{Load-aware placement is not enough.} It is worth noting which baseline is \emph{worst} on balance: P2C, the only load-aware baseline, trails on every dispersion metric at both scales (16-card CV $0.553$, JFI $0.764$). Choosing cards by instantaneous load reacts to congestion after it forms; it does not anticipate the temporal structure that causes it. STPS's advantage is therefore not merely "awareness of load" but awareness of the \emph{traffic timeline}, which is what lets it place and phase-shift before the collision rather than chase it. The load-balance result thus reinforces the congestion result rather than standing apart from it: the same de-synchronisation that lowers congestion (Section~\ref{sec:eval:congestion}) is what shrinks across-card dispersion at scale.
 
 \subsection{Scheduling Overhead}
 \label{sec:eval:overhead}
