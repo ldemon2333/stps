@@ -147,12 +147,12 @@
 \newlabel{sec:eval:robustness}{{7.5}{12}{Robustness to Fingerprint Drift}{subsection.7.5}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces STPS congestion under $\pm p\,\%$ multiplicative fingerprint noise applied to the scheduler's view only (16 cards, bursty, 5 seeds, 95\,\% CI). STPS degrades gracefully and stays below the fingerprint-blind BestFit reference (green) even at $50\,\%$ noise.}}{12}{figure.9}\protected@file@percent }
 \newlabel{fig:robustness}{{9}{12}{STPS congestion under $\pm p\,\%$ multiplicative fingerprint noise applied to the scheduler's view only (16 cards, bursty, 5 seeds, 95\,\% CI). STPS degrades gracefully and stays below the fingerprint-blind BestFit reference (green) even at $50\,\%$ noise}{figure.9}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 128 cards, holding a stable $8$--$12\,\%$ relative advantage.}}{12}{figure.10}\protected@file@percent }
-\newlabel{fig:scalability}{{10}{12}{NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 128 cards, holding a stable $8$--$12\,\%$ relative advantage}{figure.10}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {7.6}Scalability}{12}{subsection.7.6}\protected@file@percent }
 \newlabel{sec:eval:scalability}{{7.6}{12}{Scalability}{subsection.7.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.7}Simulator Fidelity and Threats to Validity}{13}{subsection.7.7}\protected@file@percent }
-\newlabel{sec:eval:fidelity}{{7.7}{13}{Simulator Fidelity and Threats to Validity}{subsection.7.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.7}Simulator Fidelity and Threats to Validity}{12}{subsection.7.7}\protected@file@percent }
+\newlabel{sec:eval:fidelity}{{7.7}{12}{Simulator Fidelity and Threats to Validity}{subsection.7.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 64 cards, holding a stable $8$--$12\,\%$ relative advantage.}}{13}{figure.10}\protected@file@percent }
+\newlabel{fig:scalability}{{10}{13}{NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 64 cards, holding a stable $8$--$12\,\%$ relative advantage}{figure.10}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{13}{section.8}\protected@file@percent }
 \newlabel{sec:conclusion}{{8}{13}{Conclusion}{section.8}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {A}Load-Balance Metric Definitions}{13}{appendix.A}\protected@file@percent }
@@ -160,16 +160,15 @@
 \@writefile{toc}{\contentsline {section}{\numberline {B}Cross-Regime Cap-Binding Study}{13}{appendix.B}\protected@file@percent }
 \newlabel{app:regime}{{B}{13}{Cross-Regime Cap-Binding Study}{appendix.B}{}}
 \@writefile{toc}{\contentsline {paragraph}{The three workpoints.}{13}{section*.25}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase-shift's CV effect flips sign with the cap.}{13}{section*.26}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Cross-regime cap-binding profile (5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph  {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max }]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion.}}{14}{table.6}\protected@file@percent }
-\newlabel{tab:q2_regime_profile}{{6}{14}{Cross-regime cap-binding profile (5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max }]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion}{table.6}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Cross-regime $\Delta $CV under \textsc  {+ps} (5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). The sign flips with cap binding: phase-shift \emph  {raises} CV for every policy in the binding regime~A (all cells negative), because a hard cap has already flattened the baselines and any offset scatters served load off that flat profile; it \emph  {lowers} CV in the non-binding (B) and light (C) regimes, where the baselines retain enough natural dispersion for burst de-synchronisation to help. The magnitude scales with how much across-card dispersion the baseline leaves on the table, and the sign with whether the cap binds.}}{14}{table.7}\protected@file@percent }
-\newlabel{tab:q2_regime_cv}{{7}{14}{Cross-regime $\Delta $CV under \textsc {+ps} (5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). The sign flips with cap binding: phase-shift \emph {raises} CV for every policy in the binding regime~A (all cells negative), because a hard cap has already flattened the baselines and any offset scatters served load off that flat profile; it \emph {lowers} CV in the non-binding (B) and light (C) regimes, where the baselines retain enough natural dispersion for burst de-synchronisation to help. The magnitude scales with how much across-card dispersion the baseline leaves on the table, and the sign with whether the cap binds}{table.7}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Cross-regime direction summary for the remaining Stage-B metrics. Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect flips sign with binding --- it \emph  {raises} CV in the hard-binding regime~A and lowers it in B and~C. The throughput cost is set by the offset budget's ratio to the steady-state window, not by the cap.}}{14}{table.8}\protected@file@percent }
-\newlabel{tab:q2_regime_multi}{{8}{14}{Cross-regime direction summary for the remaining Stage-B metrics. Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect flips sign with binding --- it \emph {raises} CV in the hard-binding regime~A and lowers it in B and~C. The throughput cost is set by the offset budget's ratio to the steady-state window, not by the cap}{table.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Cross-regime cap-binding profile (16 cards, 5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph  {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max }]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion.}}{14}{table.6}\protected@file@percent }
+\newlabel{tab:q2_regime_profile}{{6}{14}{Cross-regime cap-binding profile (16 cards, 5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph {offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max }]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref {sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion}{table.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Cross-regime $\Delta $CV under \textsc  {+ps} (16 cards, 5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). Phase-shift lowers CV for \emph  {every} policy in the non-binding (B) and light (C) regimes. In the binding regime~A the effect is mixed: BestFit/DRF and P2C still improve, but the round-robin baseline and the already-spatially-balanced \textsc  {stps-spatial} regress, because a tight cap has pre-flattened their served load and any offset scatters it off that floor. Dispersion is thus a sign-varying side-effect of phase-shift, not a second objective; congestion (the target) moves one way only.}}{14}{table.7}\protected@file@percent }
+\newlabel{tab:q2_regime_cv}{{7}{14}{Cross-regime $\Delta $CV under \textsc {+ps} (16 cards, 5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). Phase-shift lowers CV for \emph {every} policy in the non-binding (B) and light (C) regimes. In the binding regime~A the effect is mixed: BestFit/DRF and P2C still improve, but the round-robin baseline and the already-spatially-balanced \textsc {stps-spatial} regress, because a tight cap has pre-flattened their served load and any offset scatters it off that floor. Dispersion is thus a sign-varying side-effect of phase-shift, not a second objective; congestion (the target) moves one way only}{table.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Phase-shift's CV effect depends on the cap.}{14}{section*.26}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Cross-regime direction summary for the remaining Stage-B metrics (16 cards). Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect is uniformly favourable in the loose regimes (B,~C) and mixed under the hard-binding cap (A), where round-robin and \textsc  {stps-spatial} regress while BestFit/P2C still improve. The throughput cost is set by the offset budget's ratio to the steady-state window and the cap-rejection rate.}}{14}{table.8}\protected@file@percent }
+\newlabel{tab:q2_regime_multi}{{8}{14}{Cross-regime direction summary for the remaining Stage-B metrics (16 cards). Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect is uniformly favourable in the loose regimes (B,~C) and mixed under the hard-binding cap (A), where round-robin and \textsc {stps-spatial} regress while BestFit/P2C still improve. The throughput cost is set by the offset budget's ratio to the steady-state window and the cap-rejection rate}{table.8}{}}
 \@writefile{toc}{\contentsline {paragraph}{The mechanism, broken down.}{14}{section*.27}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{The cost of phase-shift is throughput.}{14}{section*.28}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{An asymmetry between two ways to relieve the cap.}{14}{section*.29}\protected@file@percent }
 \bibstyle{plain}
 \bibdata{references}
 \bibcite{davies2018loihi}{1}
@@ -177,17 +176,17 @@
 \bibcite{ghodsi2011dominant}{3}
 \bibcite{grandl2014multi}{4}
 \bibcite{gujarati2020clockwork}{5}
-\bibcite{jain1984quantitative}{6}
-\bibcite{lee2011validating}{7}
-\bibcite{ma2024darwin3}{8}
-\bibcite{mayr2019spinnaker2}{9}
-\bibcite{merolla2014truenorth}{10}
-\bibcite{mohan2022looking}{11}
-\bibcite{narayanan2020heterogeneity}{12}
-\bibcite{orchard2021loihi2}{13}
-\bibcite{panigrahy2011heuristics}{14}
-\bibcite{288610}{15}
-\bibcite{weng2023beware}{16}
-\bibcite{xiao2018gandiva}{17}
-\bibcite{zhou2023spikformer}{18}
+\bibcite{lee2011validating}{6}
+\bibcite{ma2024darwin3}{7}
+\bibcite{mayr2019spinnaker2}{8}
+\bibcite{merolla2014truenorth}{9}
+\bibcite{mohan2022looking}{10}
+\bibcite{narayanan2020heterogeneity}{11}
+\bibcite{orchard2021loihi2}{12}
+\bibcite{panigrahy2011heuristics}{13}
+\bibcite{288610}{14}
+\bibcite{weng2023beware}{15}
+\bibcite{xiao2018gandiva}{16}
+\@writefile{toc}{\contentsline {paragraph}{An asymmetry between two ways to relieve the cap.}{15}{section*.29}\protected@file@percent }
+\bibcite{zhou2023spikformer}{17}
 \gdef \@abspage@last{16}

@@ -456,14 +456,14 @@ The evaluation answers two questions.
 \textbf{Q1} (Section~\ref{sec:eval:balance}): Does STPS improve across-card load balance while simultaneously reducing NoC congestion? 
 \textbf{Q2} (Section~\ref{sec:eval:spatial}): How do macro-dispatch and phase-shift contribute to the performance? 
 We then report the scheduler's own overhead (Section~\ref{sec:eval:overhead}), 
-its robustness to fingerprint drift (Section~\ref{sec:eval:robustness}), its scaling to 128 cards (Section~\ref{sec:eval:scalability}), and the simulator's fidelity and limitations (Section~\ref{sec:eval:fidelity}). 
+its robustness to fingerprint drift (Section~\ref{sec:eval:robustness}), its scaling to 64 cards (Section~\ref{sec:eval:scalability}), and the simulator's fidelity and limitations (Section~\ref{sec:eval:fidelity}). 
 
 The headline finding is a consistency one. At 16 cards, STPS posts the lowest across-card CV and LIF and the highest fairness index in every arrival scenario tested. This improved load balance does not come at the expense of performance: STPS is the only scheduler that lowers NoC congestion --- on both the congestion ratio and the mean queue wait --- in every one of the arrival cells tested, while capacity-blind baselines trade the lead from cell to cell. It cuts the congestion ratio by 7--11\,\% and the queue wait by 8--18\,\% relative to the best baseline in each cell, all while maintaining cluster throughput within 0.3\,\% of the peak. The whole per-card congestion distribution shifts down, not just its mean.
 
 \subsection{Evaluation Setup}
 \label{sec:eval:setup}
 
-We evaluate STPS using a discrete-event simulator (Section~\ref{sec:impl}) that models per-card NoC pressure. Unless otherwise stated, the default configuration is a cluster with $M\!=\!16$ cards. Each simulation run spans 1024 ticks with 2048 task arrivals. Other default parameters are $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, and $H\!=\!64$. We also simulate a larger cluster with up to 128 cards to evaluate scalability. Workloads mix four synthetic templates with three real SpikingJelly-derived traces under Poisson and bursty arrivals.
+We evaluate STPS using a discrete-event simulator (Section~\ref{sec:impl}) that models per-card NoC pressure. Unless otherwise stated, the default configuration is a cluster with $M\!=\!16$ cards. Each simulation run spans 512 ticks with 3200 task arrivals. Other default parameters are $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, and $H\!=\!64$. We also simulate a larger cluster with up to 64 cards to evaluate scalability. Workloads mix four synthetic templates with three real SpikingJelly-derived traces under Poisson and bursty arrivals.
 
 \paragraph{Baselines.} We compare STPS against four fingerprint-blind spatial schedulers: Round-robin (\textbf{RR}), best-fit on free cores (\textbf{BestFit}), dominant-resource fairness (\textbf{DRF})~\cite{ghodsi2011dominant}, and power-of-two-choices (\textbf{P2C})~\cite{mohan2022looking}. We isolate Stage-1's macro-dispatch as \textsc{stps-spatial} and the full scheduler as \textsc{stps-spatial+ps}.
 
@@ -592,7 +592,7 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
 \subsection{Q2: Macro-Dispatch and Phase-Shift Are Complementary}
 \label{sec:eval:spatial}
 
-STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation must isolate the contribution of each stage. Table~\ref{tab:q2_phase} holds the default congested operating point of Table~\ref{tab:q0_main} ($BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 2048 tasks, 16 cards) and decomposes each policy family into three variants: the spatial policy alone (\textsc{base}), the same policy augmented with phase-shift (\textsc{+ps}), and \textsc{stps-spatial} --- our macro-dispatch in isolation --- with and without phase-shift. The \textsc{stps-spatial+ps} row is the full scheduler. Comparing each \textsc{base} row with its \textsc{+ps} counterpart isolates Stage~B's marginal effect; comparing the spatial-only rows isolates Stage~A's placement effect. Stage~B is policy-agnostic by construction: it consumes the traffic timeline $E^{(t)}$ and the card forecast, scans up to $D_{\max}$ offsets, and commits the one whose forecast peak is lowest under the cap (Algorithm~\ref{alg:phase_shift}), so it can be attached to any spatial policy. The decomposition makes one thing immediate (Figure~\ref{fig:ablation}): bolting phase-shift onto a capacity baseline does drive congestion to zero, but it pays for that with a steep 28--34\,\% throughput loss; only the full STPS pairing relieves congestion at negligible throughput cost.
+STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation must isolate the contribution of each stage. Table~\ref{tab:q2_phase} holds the default congested operating point of Table~\ref{tab:q0_main} ($BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 3200 tasks, 16 cards) and decomposes each policy family into three variants: the spatial policy alone (\textsc{base}), the same policy augmented with phase-shift (\textsc{+ps}), and \textsc{stps-spatial} --- our macro-dispatch in isolation --- with and without phase-shift. The \textsc{stps-spatial+ps} row is the full scheduler. Comparing each \textsc{base} row with its \textsc{+ps} counterpart isolates Stage~B's marginal effect; comparing the spatial-only rows isolates Stage~A's placement effect. Stage~B is policy-agnostic by construction: it consumes the traffic timeline $E^{(t)}$ and the card forecast, scans up to $D_{\max}$ offsets, and commits the one whose forecast peak is lowest under the cap (Algorithm~\ref{alg:phase_shift}), so it can be attached to any spatial policy. The decomposition makes one thing immediate (Figure~\ref{fig:ablation}): bolting phase-shift onto a capacity baseline does drive congestion to zero, but it pays for that with a steep 24--34\,\% throughput loss; only the full STPS pairing relieves congestion at negligible throughput cost.
 
 \begin{figure}[t]
 \centering
@@ -607,7 +607,7 @@ STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation
 
 \paragraph{The two stages occupy complementary roles.} The decomposition makes the division of labour legible (Figure~\ref{fig:ablation}). Phase-shift on a capacity baseline drives congestion to exactly zero but at a steep 24--34\,\% throughput cost; macro-dispatch alone (\textsc{stps-spatial}) holds throughput at the baseline but leaves most of the congestion ($0.11$--$0.12$) in place. Only the pairing reaches a deployable compromise: full STPS is the single variant that lowers congestion while keeping throughput essentially flat ($6.074\!\to\!6.056$), whereas every baseline+phase-shift row that zeroes congestion sacrifices roughly a third of throughput to do it. Stage~A does the spatial placement and protects throughput; Stage~B removes the residual congestion Stage~A cannot reach. Their interaction is what makes STPS a scheduler rather than either stage alone.
 
-\paragraph{Stage~B works best before hard saturation.} Phase-shift only relieves congestion where the cap binds. Sweeping the cap across three regimes --- binding ($BW_{\max}\!=\!9\!\times\!10^{5}$, 800 tasks; $\sim$0.26 baseline congestion), non-binding ($5\!\times\!10^{6}$, demand never reaches the cap), and lightly binding ($9\!\times\!10^{5}$, 400 tasks; $\sim$0.09) --- the congestion ratio drops to zero wherever there is congestion to remove (binding and light) and is undefined where there is none (non-binding). Its effect on dispersion has the opposite sign in the two congested regimes: under the hard-binding cap phase-shift \emph{raises} CV for every policy (the queue has already flattened the baselines, so any offset scatters load off that flat profile), whereas under the light cap it \emph{lowers} CV (the baselines keep enough natural dispersion that de-synchronising bursts helps). Either way the price is throughput (18--23\,\% binding, 14--16\,\% light). The practical reading: STPS's sweet-spot is a correctly- or over-provisioned cluster, and full STPS ships $D_{\max}\!=\!2$ so the offset stays small; pushed into heavy congestion, the right response is provisioning, not a larger offset budget. Appendix~\ref{app:regime} gives the full per-policy grid and the sign structure of the CV effect.
+\paragraph{Stage~B works best before hard saturation.} Phase-shift only relieves congestion where the cap binds. Sweeping the cap across three regimes --- binding ($BW_{\max}\!=\!9\!\times\!10^{5}$, 3200 tasks; $\sim$0.12 baseline congestion), non-binding ($5\!\times\!10^{6}$, demand never reaches the cap), and lightly binding ($9\!\times\!10^{5}$, 1600 tasks; $\sim$0.045) --- the congestion ratio drops to zero wherever there is congestion to remove (binding and light) and is undefined where there is none (non-binding). Its effect on dispersion depends on the regime: under the loose caps (light and non-binding) phase-shift \emph{lowers} CV for every policy (the baselines keep enough natural dispersion that de-synchronising bursts helps), whereas under the hard-binding cap the effect is mixed --- the naturally lumpy BestFit and P2C still improve, but round-robin and the already-balanced \textsc{stps-spatial} regress, because a tight cap has pre-flattened their load and any offset scatters it. Either way the price is throughput (18--22\,\% binding, 14--17\,\% light). The practical reading: STPS's sweet-spot is a correctly- or over-provisioned cluster, and full STPS ships $D_{\max}\!=\!2$ so the offset stays small; pushed into heavy congestion, the right response is provisioning, not a larger offset budget. Appendix~\ref{app:regime} gives the full per-policy grid and the sign structure of the CV effect.
 
 \begin{table}[t]
 \centering
@@ -627,7 +627,7 @@ Throughput               & partial recovery & stays below baseline \\
 \end{tabular}
 \end{table}
 
-\paragraph{A small offset budget captures most of the gain.} A budget sweep $D_{\max} \in \{2,4,8,16\}$ at the light cap (Table~\ref{tab:q2_dmax}) shows the metric groups pulling against each other, with congestion the one that matters. Congestion relief is binary: the moment phase-shift is enabled, every capacity baseline's congestion ratio drops from $\sim$0.09 to zero, and no larger budget improves on zero. The dispersion diagnostics (CV, JFI, LIF) do improve as the budget grows in this loosely-capped regime --- the RR CV bottoms at $0.44$ for $D_{\max}\!=\!8$ then rebounds at $16$ --- but this is a side-effect, not the objective, and it saturates quickly. The mean injected offset grows from $\sim$0.5 to $\sim$4 ticks across the sweep, and we adopt $D_{\max}\!=\!2$ as the default: it already zeroes congestion and holds the mean offset under one tick. On full STPS the case is sharper still --- a larger budget yields no congestion gain (Stage~A has already consumed the spatial slack) and only adds unnecessary offset, so $D_{\max}\!=\!2$ is strictly preferred. The cap-binding sweep (Appendix~\ref{app:regime}) explains which of these signals would persist or invert under a heavier cap, even at this attenuated budget.
+\paragraph{A small offset budget captures most of the gain.} A budget sweep $D_{\max} \in \{2,4,8,16\}$ at the light cap (Table~\ref{tab:q2_dmax}) shows the metric groups pulling against each other, with congestion the one that matters. Congestion relief is binary: the moment phase-shift is enabled, every capacity baseline's congestion ratio drops from $\sim$0.045 to zero, and no larger budget improves on zero. The dispersion diagnostics (CV, JFI, LIF) do improve as the budget grows in this loosely-capped regime --- the RR CV falls monotonically from $0.69$ at $D_{\max}\!=\!2$ to $0.54$ at $D_{\max}\!=\!16$ --- but this is a side-effect, not the objective, and it saturates near $D_{\max}\!=\!8$. The mean injected offset grows from $\sim$0.5 to $\sim$5 ticks across the sweep, and we adopt $D_{\max}\!=\!2$ as the default: it already zeroes congestion and holds the mean offset under one tick. On full STPS the case is sharper still --- a larger budget yields no congestion gain (Stage~A has already consumed the spatial slack) and only adds unnecessary offset, so $D_{\max}\!=\!2$ is strictly preferred. The cap-binding sweep (Appendix~\ref{app:regime}) explains which of these signals would persist or invert under a heavier cap, even at this attenuated budget.
 
 
 \subsection{Scheduling Overhead}
@@ -674,12 +674,12 @@ STPS decides from an offline fingerprint, so a natural question is what happens 
 \subsection{Scalability}
 \label{sec:eval:scalability}
 
-The results thus far focus on the 16-card cluster. We now sweep the cluster size from 4 up to 128 cards, scaling the total task count proportionally to maintain constant per-card load, to verify that STPS's advantage scales. Figure~\ref{fig:scalability} shows the congestion ratio compared to the best-performing baseline at each scale. STPS maintains a consistent lead over all baselines across the entire range, and its relative congestion advantage remains stable at approximately $8$--$12\%$. This demonstrates that the scheduling logic effectively exploits the larger "global" search space of high-capacity clusters, up to 128 cards, to de-synchronize bursts and maintain balanced load.
+The results thus far focus on the 16-card cluster. We now sweep the cluster size from 4 up to 64 cards, scaling the total task count proportionally to maintain constant per-card load, to verify that STPS's advantage scales. Figure~\ref{fig:scalability} shows the congestion ratio compared to the best-performing baseline at each scale. STPS maintains a consistent lead over all baselines across the entire range, and its relative congestion advantage remains stable at approximately $8$--$12\%$. This demonstrates that the scheduling logic effectively exploits the larger "global" search space of high-capacity clusters, up to 64 cards, to de-synchronize bursts and maintain balanced load.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.72\linewidth]{picture/fig_scalability.pdf}
-\caption{NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 128 cards, holding a stable $8$--$12\,\%$ relative advantage.}
+\caption{NoC congestion ratio versus cluster size (bursty arrivals, task count scaled with cards, 5 seeds, 95\,\% CI). STPS stays below the best baseline from 4 to 64 cards, holding a stable $8$--$12\,\%$ relative advantage.}
 \label{fig:scalability}
 \end{figure}
 
@@ -726,50 +726,50 @@ Perfect balance gives $\mathrm{CV}=0$, $\mathrm{JFI}=1$, and $\mathrm{LIF}=1$; t
 
 Section~\ref{sec:eval:spatial} summarises how phase-shift's effect depends on whether the bandwidth cap binds; this appendix gives the full three-regime sweep behind that summary.
 
-\paragraph{The three workpoints.} The sweep re-runs the full Stage-B ablation under three operating regimes that vary independently along the cap-binding axis while keeping every other knob fixed (16 cards, mixed fingerprints, $H\!=\!64$, $D_{\max}\!=\!16$, 5 seeds; $D_{\max}\!=\!16$ amplifies the signal that $D_{\max}\!=\!2$ shows in attenuated form). Regime~A (binding, $BW_{\max}\!=\!9\!\times\!10^{5}$, 2048 tasks) places demand at the p75 of an uncapped run, so the cap clips roughly 13\,\% of the demanded injection into the bounded FIFO queue. Regime~B (non-binding, $BW_{\max}\!=\!5\!\times\!10^{6}$, 2048 tasks) raises the cap by $5.5\!\times$ so demand never reaches it; baselines never queue. Regime~C (lightly binding, $BW_{\max}\!=\!9\!\times\!10^{5}$, 1024 tasks) halves the task count, leaving the same cap but only $\sim$5\,\% baseline congestion. The three regimes are designed to span the operationally relevant range: a CIM cluster that is over-provisioned (B), correctly provisioned (C), or under-provisioned (A).
+\paragraph{The three workpoints.} The sweep re-runs the full Stage-B ablation under three operating regimes that vary independently along the cap-binding axis while keeping every other knob fixed (16 cards, mixed fingerprints, $H\!=\!64$, $D_{\max}\!=\!16$, 5 seeds; $D_{\max}\!=\!16$ amplifies the signal that $D_{\max}\!=\!2$ shows in attenuated form). Regime~A (binding, $BW_{\max}\!=\!9\!\times\!10^{5}$, 3200 tasks) is the paper's default workpoint: the cap clips roughly 12\,\% of the demanded injection into the bounded FIFO queue. Regime~B (non-binding, $BW_{\max}\!=\!5\!\times\!10^{6}$, 3200 tasks) raises the cap by $5.5\!\times$ so demand never reaches it; baselines never queue. Regime~C (lightly binding, $BW_{\max}\!=\!9\!\times\!10^{5}$, 1600 tasks) halves the task count, leaving the same cap but only $\sim$4--5\,\% baseline congestion. The three regimes are designed to span the operationally relevant range: a CIM cluster that is over-provisioned (B), correctly provisioned (C), or under-provisioned (A).
 
 \begin{table}[t]
 \centering
-\caption{Cross-regime cap-binding profile (5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph{offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max}]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref{sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion.}
+\caption{Cross-regime cap-binding profile (16 cards, 5 seeds, mean values). The three workpoints differ along a single axis --- how heavily the bandwidth cap binds the baseline schedulers. The \emph{offset-infeasible rate} counts tasks for which phase-shift finds no offset in $[0, D_{\max}]$ that keeps the forecast peak below the cap; such a task is still admitted at offset $0$ (no task is ever dropped, cf.\ Section~\ref{sec:eval:setup}), but phase-shift cannot relieve its contribution to congestion.}
 \label{tab:q2_regime_profile}
 \small
 \begin{tabular}{lrrr}
 \toprule
  & A: binding & B: non-binding & C: light \\
- & $9\!\times\!10^{5}$, 800 & $5\!\times\!10^{6}$, 800 & $9\!\times\!10^{5}$, 400 \\
+ & $9\!\times\!10^{5}$, 3200 & $5\!\times\!10^{6}$, 3200 & $9\!\times\!10^{5}$, 1600 \\
 \midrule
-Baseline cong.\ ratio & $\sim$0.26      & 0.00 & $\sim$0.09 \\
-Baseline CV      & 0.27--0.29      & 0.66--0.78 & 0.65--0.74 \\
-Offset-infeasible (\textsc{+ps}) & 0.18--0.22 & 0.00 & 0.14--0.16 \\
+Baseline cong.\ ratio & $\sim$0.12      & 0.00 & $\sim$0.045 \\
+Baseline CV      & 0.39--0.60      & 0.79--0.96 & 0.79--1.07 \\
+Offset-infeasible (\textsc{+ps}) & 0.16--0.20 & 0.00 & 0.14--0.16 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{Cross-regime $\Delta$CV under \textsc{+ps} (5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). The sign flips with cap binding: phase-shift \emph{raises} CV for every policy in the binding regime~A (all cells negative), because a hard cap has already flattened the baselines and any offset scatters served load off that flat profile; it \emph{lowers} CV in the non-binding (B) and light (C) regimes, where the baselines retain enough natural dispersion for burst de-synchronisation to help. The magnitude scales with how much across-card dispersion the baseline leaves on the table, and the sign with whether the cap binds.}
+\caption{Cross-regime $\Delta$CV under \textsc{+ps} (16 cards, 5 seeds, $(off\!-\!on)/off \times 100$; positive $=$ phase-shift reduces CV). Phase-shift lowers CV for \emph{every} policy in the non-binding (B) and light (C) regimes. In the binding regime~A the effect is mixed: BestFit/DRF and P2C still improve, but the round-robin baseline and the already-spatially-balanced \textsc{stps-spatial} regress, because a tight cap has pre-flattened their served load and any offset scatters it off that floor. Dispersion is thus a sign-varying side-effect of phase-shift, not a second objective; congestion (the target) moves one way only.}
 \label{tab:q2_regime_cv}
 \small
 \begin{tabular}{llrrr}
 \toprule
 Arrival & Policy & A: binding & B: non-bind. & C: light \\
 \midrule
-\multirow{4}{*}{Poisson} & RR        & $-33.7$ & $+25.9$ & $+28.5$ \\
-                         & BestFit/DRF & $-11.8$ & $+12.7$ & $+25.8$ \\
-                         & P2C       & $-43.9$ & $+27.2$ & $\phantom{0}+8.4$ \\
-                         & \textsc{stps-spatial} & $-49.7$ & $+19.8$ & $\phantom{0}+8.8$ \\
+\multirow{4}{*}{Poisson} & RR        & $-47.1$ & $+18.8$ & $+37.2$ \\
+                         & BestFit/DRF & $\phantom{0}+3.3$ & $+11.2$ & $+30.1$ \\
+                         & P2C       & $+13.9$ & $+22.3$ & $+22.1$ \\
+                         & \textsc{stps-spatial} & $-18.2$ & $+14.3$ & $\phantom{0}+9.0$ \\
 \midrule
-\multirow{4}{*}{Bursty}  & RR        & $-34.1$ & $+22.0$ & $+17.8$ \\
-                         & BestFit/DRF & $-11.8$ & $+12.5$ & $+19.1$ \\
-                         & P2C       & $-45.2$ & $+25.1$ & $\phantom{0}+2.8$ \\
-                         & \textsc{stps-spatial} & $-47.3$ & $+15.4$ & $\phantom{0}+6.7$ \\
+\multirow{4}{*}{Bursty}  & RR        & $-12.7$ & $+20.8$ & $+28.6$ \\
+                         & BestFit/DRF & $+17.9$ & $+16.7$ & $+26.9$ \\
+                         & P2C       & $+19.7$ & $+25.1$ & $+22.0$ \\
+                         & \textsc{stps-spatial} & $\phantom{0}+0.6$ & $+19.1$ & $+11.4$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{Cross-regime direction summary for the remaining Stage-B metrics. Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect flips sign with binding --- it \emph{raises} CV in the hard-binding regime~A and lowers it in B and~C. The throughput cost is set by the offset budget's ratio to the steady-state window, not by the cap.}
+\caption{Cross-regime direction summary for the remaining Stage-B metrics (16 cards). Phase-shift relieves congestion only where the cap binds (A,~C); its CV effect is uniformly favourable in the loose regimes (B,~C) and mixed under the hard-binding cap (A), where round-robin and \textsc{stps-spatial} regress while BestFit/P2C still improve. The throughput cost is set by the offset budget's ratio to the steady-state window and the cap-rejection rate.}
 \label{tab:q2_regime_multi}
 \small
 \setlength{\tabcolsep}{4pt}
@@ -777,12 +777,12 @@ Arrival & Policy & A: binding & B: non-bind. & C: light \\
 \toprule
 Metric direction & A & B & C \\
 \midrule
-CV (non-STPS)    & $\uparrow$ & $\downarrow$ & $\downarrow$ \\
-CV (STPS+ps)     & $\uparrow$ & $\downarrow$ & $\downarrow$ \\
-JFI              & $\downarrow$ & $\uparrow$   & $\uparrow$ \\
-LIF              & $\uparrow$ & $\downarrow$ & $\downarrow$ \\
-Cong.\ ratio     & $\downarrow$\,(.26$\to$0) & --- & $\downarrow$\,(.09$\to$0) \\
-Throughput cost  & 18--23\% & 3--10\% & 14--16\% \\
+CV (non-STPS)    & mixed & $\downarrow$ & $\downarrow$ \\
+CV (STPS+ps)     & $\uparrow$/flat & $\downarrow$ & $\downarrow$ \\
+JFI              & mixed & $\uparrow$   & $\uparrow$ \\
+LIF              & mixed & $\downarrow$ & $\downarrow$ \\
+Cong.\ ratio     & $\downarrow$\,(.12$\to$0) & --- & $\downarrow$\,(.045$\to$0) \\
+Throughput cost  & 18--22\% & 4--9\% & 14--17\% \\
 \bottomrule
 \end{tabular}
 
@@ -790,13 +790,13 @@ Throughput cost  & 18--23\% & 3--10\% & 14--16\% \\
 {\footnotesize CV/JFI/LIF directions follow the sign of $\Delta$CV in Table~\ref{tab:q2_regime_cv}.}
 \end{table}
 
-\paragraph{Phase-shift's CV effect flips sign with the cap.} Tables~\ref{tab:q2_regime_cv} and \ref{tab:q2_regime_multi} report the three-regime sweep. The CV column tells a two-sided story: phase-shift \emph{raises} CV for every policy in the hard-binding regime~A ($-12$ to $-50$\,\% on the reduce-CV convention) and \emph{lowers} it in the non-binding (B) and light (C) regimes ($+8$ to $+29$\,\%). The reason is the state of the baselines before phase-shift acts. Under a hard-binding cap the queue clips every card's peaks and drives the baselines to a low, artificially flat CV ($\approx$0.27); adding offsets then pulls served load off that flat floor and increases dispersion. Under a loose cap the baselines keep their natural dispersion (CV $0.65$--$0.78$), so de-synchronising bursts lowers each card's peak-to-mean ratio and reduces CV. Congestion, by contrast, moves in one direction: $\downarrow$ in A and C, undefined (already 0) in B. Phase-shift is therefore a congestion lever wherever there is congestion to lever (A,~C), and its effect on dispersion is a sign-varying side-effect, not a second objective.
+\paragraph{Phase-shift's CV effect depends on the cap.} Tables~\ref{tab:q2_regime_cv} and \ref{tab:q2_regime_multi} report the three-regime sweep. Congestion moves in one direction: $\downarrow$ in A and C, undefined (already 0) in B --- phase-shift is a congestion lever wherever there is congestion to lever. Its effect on CV is more nuanced. In the non-binding (B) and light (C) regimes phase-shift lowers CV for \emph{every} policy ($+9$ to $+37$\,\%), because the baselines keep their natural dispersion (CV $0.79$--$1.07$) and de-synchronising bursts lowers each card's peak-to-mean ratio. In the binding regime~A the effect splits: BestFit/DRF and P2C still improve ($+3$ to $+20$\,\%), but round-robin ($-47$/$-13$\,\%) and the already-spatially-balanced \textsc{stps-spatial} ($-18$/$+1$\,\%) regress. The reason is the state of those baselines before phase-shift acts: RR and \textsc{stps-spatial} already spread load evenly, so under a tight cap that further flattens served load, any injected offset scatters it off that floor and raises dispersion, whereas the naturally lumpier BestFit and P2C still have peaks to smooth. Dispersion is thus a sign-varying side-effect of phase-shift, not a second objective.
 
-\paragraph{The mechanism, broken down.} Two independent axes move under phase-shift, and the appendix separates them. Congestion is the axis STPS targets: regime~A clips $\sim$0.26 of demand into the queue and phase-shift drains it to zero, regime~C clips $\sim$0.09 to zero, regime~B never clips. Dispersion is the side-effect: its sign is set by whether the cap has pre-flattened the baselines (raises CV in A, lowers it in B/C, as above). The one regime an operator should avoid pushing STPS into is deep~A: there the offset budget cannot place every task sub-cap ($\sim$20\,\% of tasks are offset-infeasible, Table~\ref{tab:q2_regime_profile}) and the dispersion cost is real. Shipping $D_{\max}\!=\!2$ (Table~\ref{tab:q2_phase}) keeps the offset small and the dispersion cost modest even under a binding cap.
+\paragraph{The mechanism, broken down.} Two independent axes move under phase-shift, and the appendix separates them. Congestion is the axis STPS targets: regime~A clips $\sim$0.12 of demand into the queue and phase-shift drains it to zero on the capacity baselines, regime~C clips $\sim$0.045 to zero, regime~B never clips. Dispersion is the side-effect, favourable in the loose regimes (B,~C) and mixed under the hard cap (A), as above. The one regime an operator should avoid pushing STPS into is deep~A: there the offset budget cannot place every task sub-cap ($\sim$0.16--0.20 of tasks are offset-infeasible, Table~\ref{tab:q2_regime_profile}) and the dispersion cost is real for the already-balanced policies. Shipping $D_{\max}\!=\!2$ (Table~\ref{tab:q2_phase}) keeps the offset small and the dispersion cost modest even under a binding cap.
 
-\paragraph{The cost of phase-shift is throughput.} The uniform price of phase-shift, across every regime, is throughput. Throughput drops 18--23\,\% in the binding regime (the offset cannot place every task sub-cap, so $\sim$20\,\% are offset-infeasible and rejected) and 14--16\,\% in the light regime (steady-window clipping). Dispersion, by contrast, is not a uniform gain: phase-shift improves it only where the cap is loose (B,~C) and worsens it where the cap binds hard (A). This is consistent with the paper's central position --- STPS is a congestion scheduler, and load dispersion is neither its objective nor a reliable by-product. STPS's operating sweet-spot is the non-extreme regimes; the correct response to deep regime~A is a provisioning or admission decision, not a larger offset budget. The next paragraph quantifies which intervention is cleaner.
+\paragraph{The cost of phase-shift is throughput.} The uniform price of phase-shift, across every regime, is throughput. Throughput drops 18--22\,\% in the binding regime (the offset cannot place every task sub-cap, so $\sim$0.16--0.20 are offset-infeasible and rejected) and 14--17\,\% in the light regime (steady-window clipping). Dispersion, by contrast, is not a uniform gain: phase-shift improves it for every policy only where the cap is loose (B,~C), and its effect is mixed where the cap binds hard (A). This is consistent with the paper's central position --- STPS is a congestion scheduler, and load dispersion is neither its objective nor a guaranteed by-product. STPS's operating sweet-spot is the non-extreme regimes; the correct response to deep regime~A is a provisioning or admission decision, not a larger offset budget. The next paragraph quantifies which intervention is cleaner.
 
-\paragraph{An asymmetry between two ways to relieve the cap.} Regime~C halves the demand by halving the task count; regime~B raises the cap by $5.5\!\times$. Both are operationally meaningful ways for a cluster operator to "remove congestion". The offset-infeasible column of Table~\ref{tab:q2_regime_profile} shows they are not equivalent: halving demand only drops the rate from $\sim$0.20 to $\sim$0.15, while raising the cap drives it to zero. In both regimes phase-shift also lowers CV as a by-product --- $+3$ to $+29$\,\% in the light regime~C and $+12$ to $+27$\,\% in the non-binding regime~B --- but at different throughput cost: C costs 14--16\,\% while B costs only 3--10\,\%. For an operator deciding whether to provision more bandwidth or to throttle admissions, the regime sweep argues that bandwidth provisioning is the cleaner intervention for taking advantage of phase-shift.
+\paragraph{An asymmetry between two ways to relieve the cap.} Regime~C halves the demand by halving the task count; regime~B raises the cap by $5.5\!\times$. Both are operationally meaningful ways for a cluster operator to "remove congestion". The offset-infeasible column of Table~\ref{tab:q2_regime_profile} shows they are not equivalent: halving demand only drops the rate from $\sim$0.18 to $\sim$0.15, while raising the cap drives it to zero. In both regimes phase-shift also lowers CV for every policy as a by-product --- $+9$ to $+37$\,\% in the light regime~C and $+11$ to $+25$\,\% in the non-binding regime~B --- but at different throughput cost: C costs 14--17\,\% while B costs only 4--9\,\%. For an operator deciding whether to provision more bandwidth or to throttle admissions, the regime sweep argues that bandwidth provisioning is the cleaner intervention for taking advantage of phase-shift.
 
 %-------------------------------------------------------------------------------
 \bibliographystyle{plain}

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.7.2)  6 JUL 2026 12:13
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.7.2)  6 JUL 2026 12:25
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1245,26 +1245,23 @@ s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
 l.690 
-      
+       <./picture/fig_robustness.pdf>]
+Overfull \hbox (39.63681pt too wide) in paragraph at lines 736--746
+ [][] 
+ []
+
+[13
 pdfTeX warning (ext4): destination with the same identifier (name{figure.10}) h
 as been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.690 
-       <./picture/fig_robustness.pdf> <./picture/fig_scalability.pdf>]
-Overfull \hbox (30.63681pt too wide) in paragraph at lines 736--746
- [][] 
- []
-
-
+l.746 \end{table}
+                  <./picture/fig_scalability.pdf>]
 Overfull \hbox (11.37943pt too wide) in paragraph at lines 753--768
  [][] 
  []
 
-[13]
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
- [14
+[14
 pdfTeX warning (ext4): destination with the same identifier (name{table.6}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
@@ -1288,7 +1285,7 @@ Underfull \hbox (badness 1297) in paragraph at lines 33--39
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 81--87
+Underfull \hbox (badness 10000) in paragraph at lines 75--81
 []\T1/ptm/m/n/10 (+20) Deepak Narayanan, Ke-shav San-thanam, Fio-dar
  []
 
@@ -1303,11 +1300,11 @@ Package rerunfilecheck Info: File `article.out' has not changed.
 (rerunfilecheck)             Checksum: F2A6DE037D0A7788FDDD5AECCF6C00A3;5705.
  ) 
 Here is how much of TeX's memory you used:
- 35918 strings out of 476106
- 816484 string characters out of 5793934
- 1961975 words of memory out of 5000000
- 56651 multiletter control sequences out of 15000+600000
- 711396 words of font info for 504 fonts, out of 8000000 for 9000
+ 35927 strings out of 476106
+ 816535 string characters out of 5793934
+ 1960975 words of memory out of 5000000
+ 56650 multiletter control sequences out of 15000+600000
+ 711989 words of font info for 512 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
  102i,19n,107p,1779b,2201s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></us
@@ -1323,10 +1320,10 @@ re/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/share/texlive/texm
 f-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf-dist/fonts/ty
 pe1/urw/times/utmri8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/zapfch
 an/uzcmi8a.pfb>
-Output written on article.pdf (16 pages, 346599 bytes).
+Output written on article.pdf (16 pages, 347243 bytes).
 PDF statistics:
- 795 PDF objects out of 1000 (max. 8388607)
- 487 compressed objects within 5 object streams
- 121 named destinations out of 1000 (max. 500000)
+ 793 PDF objects out of 1000 (max. 8388607)
+ 485 compressed objects within 5 object streams
+ 120 named destinations out of 1000 (max. 500000)
  146224 words of extra memory for PDF output out of 154059 (max. 10000000)
 
