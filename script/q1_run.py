@@ -56,9 +56,13 @@ SCHEDULER_LABELS = {
     "stps-spatial": "STPS (Step A)",
 }
 SEEDS = [21, 42, 99, 123, 2024]
-CARDS = 4
+# Cluster scale is overridable via Q1_CARDS so the Stage-A sweeps can be run at
+# the paper's 16-card main-experiment scale. Task counts scale proportionally so
+# per-card utilisation is held fixed relative to the 4-card calibration.
+CARDS = int(os.environ.get("Q1_CARDS", "4"))
+_SCALE = max(1, CARDS // 4)
 STEPS = 512
-DEFAULT_TASKS = 800  # ~70% utilization under cores=512/card.
+DEFAULT_TASKS = 800 * _SCALE  # ~70% utilization under cores=512/card.
 FINGERPRINT_DIR = "npz"
 FLAT_FP = "npz/synthetic_flat.npz"
 BURSTY_FP = "npz/synthetic_bursty.npz"
@@ -186,7 +190,8 @@ def run_main(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
 
 def run_sweep(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
     # Utilization knobs: vary `tasks` while holding everything else fixed.
-    util_to_tasks = {0.30: 320, 0.50: 560, 0.70: 800, 0.85: 1020, 0.95: 1100}
+    util_to_tasks = {k: v * _SCALE for k, v in
+                     {0.30: 320, 0.50: 560, 0.70: 800, 0.85: 1020, 0.95: 1100}.items()}
     print(f"[Q1.sweep] {len(SCHEDULERS)} schedulers x {len(util_to_tasks)} util x "
           f"{len(SEEDS)} seeds, arrival=poisson, workers={workers}")
     jobs = [
@@ -239,9 +244,10 @@ def run_mix(out_dir: Path, workers: int = _WORKERS) -> List[Dict]:
         ratio_dirs: Dict[tuple, str] = {}
         for flat_pct, bursty_pct in ratios:
             d = tmp_root_p / f"flat{flat_pct}_bursty{bursty_pct}"
-            # Use 4 fingerprints total to keep the round-robin period short.
-            n_flat = flat_pct * 4 // 100
-            n_bursty = bursty_pct * 4 // 100
+            # Fingerprint-dir size scales with cards to keep the round-robin
+            # period aligned with the cluster's per-card assignment.
+            n_flat = flat_pct * CARDS // 100
+            n_bursty = bursty_pct * CARDS // 100
             # Edge cases (100/0 or 0/100): degenerate to a single-file dir.
             if n_flat == 0 and n_bursty == 0:
                 # Should not happen with these ratios, but guard.

@@ -9,7 +9,7 @@ blind baseline zeroes congestion only by paying a large throughput cost;
 macro-dispatch alone preserves throughput but leaves congestion untouched; only
 the pairing (full STPS) relieves congestion at preserved throughput.
 
-Reads data/q2/main4_bw9e5_d2_t400_summary.csv (the tab:q2_phase source).
+Reads data/q2/main16_bw9e5_d2_summary.csv (the tab:q2_phase source, 16 cards).
 Writes SNN schedule/picture/fig_ablation.pdf.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[1]
 PIC = ROOT / "SNN schedule" / "picture"
-SUMMARY = ROOT / "data/q2/main4_bw9e5_d2_t400_summary.csv"
+SUMMARY = ROOT / "data/q2/main16_bw9e5_d2_summary.csv"
 
 # (base_algo, phase_enabled) -> label, colour
 STEPS = [

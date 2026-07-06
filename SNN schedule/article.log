@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.7.2)  6 JUL 2026 09:01
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.7.2)  6 JUL 2026 12:13
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1066,239 +1066,223 @@ LaTeX Font Info:    Trying to load font information for TS1+ptm on input line 7
  (/usr/share/texlive/texmf-dist/tex/latex/psnfss/ts1ptm.fd
 File: ts1ptm.fd 2001/06/04 font definitions for TS1/ptm.
 )
-[2] [3] [4]
+[2] [3]
+LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 164.
+LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <5> not available
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 164.
+<picture/motivation_congestion.pdf, id=236, 486.58524pt x 193.3511pt>
+File: picture/motivation_congestion.pdf Graphic file (type pdf)
+<use picture/motivation_congestion.pdf>
+Package pdftex.def Info: picture/motivation_congestion.pdf  used on input line 
+196.
+(pdftex.def)             Requested size: 241.02039pt x 95.7725pt.
+<picture/motivation_pressure_vs_util.pdf, id=237, 295.79868pt x 194.3097pt>
+File: picture/motivation_pressure_vs_util.pdf Graphic file (type pdf)
+<use picture/motivation_pressure_vs_util.pdf>
+Package pdftex.def Info: picture/motivation_pressure_vs_util.pdf  used on input
+ line 203.
+(pdftex.def)             Requested size: 173.53496pt x 113.9924pt.
+
+Underfull \vbox (badness 1895) has occurred while \output is active []
+
+ [4
+pdfTeX warning (ext4): destination with the same identifier (name{figure.1}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.209 
+      
+pdfTeX warning (ext4): destination with the same identifier (name{figure.2}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.209 
+       <./picture/motivation_congestion.pdf> <./picture/motivation_pressure_vs_
+util.pdf>] [5
+pdfTeX warning (ext4): destination with the same identifier (name{table.1}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.221 T
+       he rest of this section justifies the fingerprint design (Section~\re...
+]
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 8.99994pt on input line 282.
+(Font)              scaled to size 8.99994pt on input line 334.
 Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `phv' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 8.09995pt on input line 282.
+(Font)              scaled to size 8.09995pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 8.09995pt on input line 282.
+(Font)              scaled to size 8.09995pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 7.19995pt on input line 282.
-LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 282.
-LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <5> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 282.
+(Font)              scaled to size 7.19995pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 8.99994pt on input line 282.
+(Font)              scaled to size 8.99994pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 7.19995pt on input line 282.
+(Font)              scaled to size 7.19995pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 6.29996pt on input line 282.
+(Font)              scaled to size 6.29996pt on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/m/it' in size <8> not available
-(Font)              Font shape `T1/phv/m/sl' tried instead on input line 282.
+(Font)              Font shape `T1/phv/m/sl' tried instead on input line 334.
 LaTeX Font Info:    Font shape `T1/phv/m/sl' will be
-(Font)              scaled to size 7.19995pt on input line 282.
+(Font)              scaled to size 7.19995pt on input line 334.
 
-Underfull \hbox (badness 2951) in paragraph at lines 300--301
+Underfull \hbox (badness 2951) in paragraph at lines 352--353
 []\T1/ptm/m/n/10 (+20) A fourth quan-tity, the per-population max-i-mum in-
  []
 
 Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
-put line 332.
-[5]
+put line 384.
+[6]
 Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `pcr' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
- [6
-pdfTeX warning (ext4): destination with the same identifier (name{figure.1}) ha
-s been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.372 
-      ]
-Underfull \hbox (badness 3460) in paragraph at lines 388--389
-[]\T1/ptm/b/n/10 (+20) Baselines are fingerprint-blind spa-tial sched-ulers.
- []
-
-
-Underfull \hbox (badness 1496) in paragraph at lines 388--389
-\T1/ptm/m/n/10 (+20) resource fair-ness (\T1/ptm/b/n/10 (+20) DRF\T1/ptm/m/n/10
- (+20) ) [[][]3[][]], and power-of-two-choices
- []
-
-[7]
-<picture/motivation_congestion.pdf, id=312, 486.58524pt x 193.3511pt>
-File: picture/motivation_congestion.pdf Graphic file (type pdf)
-<use picture/motivation_congestion.pdf>
-Package pdftex.def Info: picture/motivation_congestion.pdf  used on input line 
-399.
-(pdftex.def)             Requested size: 241.02039pt x 95.7725pt.
-<picture/motivation_pressure_vs_util.pdf, id=313, 295.79868pt x 194.3097pt>
-File: picture/motivation_pressure_vs_util.pdf Graphic file (type pdf)
-<use picture/motivation_pressure_vs_util.pdf>
-Package pdftex.def Info: picture/motivation_pressure_vs_util.pdf  used on input
- line 406.
-(pdftex.def)             Requested size: 173.53496pt x 113.9924pt.
- [8
-pdfTeX warning (ext4): destination with the same identifier (name{figure.2}) ha
-s been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.468 
-      
+ [7
 pdfTeX warning (ext4): destination with the same identifier (name{figure.3}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.468 
-       <./picture/motivation_congestion.pdf> <./picture/motivation_pressure_vs_
-util.pdf>]
-<picture/fig_congestion_bars.pdf, id=415, 641.87993pt x 214.40938pt>
+l.462 
+      ] [8
+pdfTeX warning (ext4): destination with the same identifier (name{table.2}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.497 
+      ]
+<picture/fig_congestion_bars.pdf, id=396, 439.52393pt x 215.30246pt>
 File: picture/fig_congestion_bars.pdf Graphic file (type pdf)
 <use picture/fig_congestion_bars.pdf>
-Package pdftex.def Info: picture/fig_congestion_bars.pdf  used on input line 49
-1.
-(pdftex.def)             Requested size: 241.02039pt x 80.508pt.
-<picture/fig_percard_cdf.pdf, id=416, 585.04387pt x 208.43622pt>
+Package pdftex.def Info: picture/fig_congestion_bars.pdf  used on input line 50
+2.
+(pdftex.def)             Requested size: 241.02039pt x 118.06519pt.
+<picture/fig_percard_cdf.pdf, id=397, 585.04387pt x 208.43622pt>
 File: picture/fig_percard_cdf.pdf Graphic file (type pdf)
 <use picture/fig_percard_cdf.pdf>
-Package pdftex.def Info: picture/fig_percard_cdf.pdf  used on input line 498.
+Package pdftex.def Info: picture/fig_percard_cdf.pdf  used on input line 509.
 (pdftex.def)             Requested size: 241.02039pt x 85.86967pt.
-<picture/fig_ablation.pdf, id=424, 591.15607pt x 240.67076pt>
-File: picture/fig_ablation.pdf Graphic file (type pdf)
-<use picture/fig_ablation.pdf>
-Package pdftex.def Info: picture/fig_ablation.pdf  used on input line 544.
-(pdftex.def)             Requested size: 241.02039pt x 98.12479pt.
+
+Underfull \vbox (badness 3861) has occurred while \output is active []
+
  [9
+pdfTeX warning (ext4): destination with the same identifier (name{table.3}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.589 
+      
 pdfTeX warning (ext4): destination with the same identifier (name{figure.4}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.550 
+l.589 
       
 pdfTeX warning (ext4): destination with the same identifier (name{figure.5}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.550 
+l.589 
        <./picture/fig_congestion_bars.pdf> <./picture/fig_percard_cdf.pdf>]
+<picture/fig_ablation.pdf, id=496, 593.23383pt x 240.67076pt>
+File: picture/fig_ablation.pdf Graphic file (type pdf)
+<use picture/fig_ablation.pdf>
+Package pdftex.def Info: picture/fig_ablation.pdf  used on input line 599.
+(pdftex.def)             Requested size: 241.02039pt x 97.77959pt.
+
 [10
 pdfTeX warning (ext4): destination with the same identifier (name{figure.6}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.635 
-       <./picture/fig_ablation.pdf>]
-Overfull \hbox (36.03421pt too wide) in paragraph at lines 643--655
- [][] 
- []
-
-[11
+l.605 
+      
 pdfTeX warning (ext4): destination with the same identifier (name{figure.7}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.658 
-      
+l.605 
+      ]
+Overfull \hbox (36.03421pt too wide) in paragraph at lines 617--628
+ [][] 
+ []
+
+[11
 pdfTeX warning (ext4): destination with the same identifier (name{figure.8}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.658 
-      ]
-<picture/stps_long_tail_4card_poisson.pdf, id=592, 439.47939pt x 286.09258pt>
-File: picture/stps_long_tail_4card_poisson.pdf Graphic file (type pdf)
-<use picture/stps_long_tail_4card_poisson.pdf>
-Package pdftex.def Info: picture/stps_long_tail_4card_poisson.pdf  used on inpu
-t line 668.
-(pdftex.def)             Requested size: 242.82503pt x 158.07605pt.
-<picture/stps_long_tail_4card_bursty.pdf, id=593, 432.54724pt x 286.09258pt>
-File: picture/stps_long_tail_4card_bursty.pdf Graphic file (type pdf)
-<use picture/stps_long_tail_4card_bursty.pdf>
-Package pdftex.def Info: picture/stps_long_tail_4card_bursty.pdf  used on input
- line 673.
-(pdftex.def)             Requested size: 242.82503pt x 160.61237pt.
-<picture/stps_long_tail_16card_poisson.pdf, id=594, 446.50563pt x 286.09258pt>
-File: picture/stps_long_tail_16card_poisson.pdf Graphic file (type pdf)
-<use picture/stps_long_tail_16card_poisson.pdf>
-Package pdftex.def Info: picture/stps_long_tail_16card_poisson.pdf  used on inp
-ut line 681.
-(pdftex.def)             Requested size: 242.82503pt x 155.58777pt.
-<picture/stps_long_tail_16card_bursty.pdf, id=595, 439.57349pt x 286.09258pt>
-File: picture/stps_long_tail_16card_bursty.pdf Graphic file (type pdf)
-<use picture/stps_long_tail_16card_bursty.pdf>
-Package pdftex.def Info: picture/stps_long_tail_16card_bursty.pdf  used on inpu
-t line 686.
-(pdftex.def)             Requested size: 242.82503pt x 158.04114pt.
-
-Overfull \hbox (1.23856pt too wide) in paragraph at lines 711--728
- [][] 
- []
-
-[12]
-Underfull \hbox (badness 10000) in paragraph at lines 739--740
-\T1/ptm/m/n/10 (+20) A sched-uler that in-spects a work-load fin-ger-print
- []
-
-
-Underfull \hbox (badness 4441) in paragraph at lines 739--740
-\T1/ptm/m/n/10 (+20) must jus-tify its admission-time cost. We in-stru-ment
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 745--745
-[]\T1/ptm/m/n/10 (+20) Table 6: []Admission-decision la-tency (5-seed in-stru-
- []
-
-
-Underfull \hbox (badness 1728) in paragraph at lines 745--745
-\T1/pcr/m/n/10 select_card_for_task\T1/ptm/m/n/10 (+20) ; me-dian and p99 ex-cl
-ude the
- []
-
-
-Overfull \hbox (11.94731pt too wide) in paragraph at lines 748--767
- [][] 
- []
-
-[13
+l.631 
+      
+pdfTeX warning (ext4): destination with the same identifier (name{table.4}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.631 
+       <./picture/fig_ablation.pdf>]
+<picture/fig_robustness.pdf, id=567, 310.44669pt x 201.5367pt>
+File: picture/fig_robustness.pdf Graphic file (type pdf)
+<use picture/fig_robustness.pdf>
+Package pdftex.def Info: picture/fig_robustness.pdf  used on input line 669.
+(pdftex.def)             Requested size: 173.53496pt x 112.6568pt.
+<picture/fig_scalability.pdf, id=569, 324.84111pt x 208.76369pt>
+File: picture/fig_scalability.pdf Graphic file (type pdf)
+<use picture/fig_scalability.pdf>
+Package pdftex.def Info: picture/fig_scalability.pdf  used on input line 681.
+(pdftex.def)             Requested size: 173.53496pt x 111.52658pt.
+ [12
+pdfTeX warning (ext4): destination with the same identifier (name{table.5}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.690 
+      
 pdfTeX warning (ext4): destination with the same identifier (name{figure.9}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.773 
-       <./picture/stps_long_tail_4card_poisson.pdf> <./picture/stps_long_tail_4
-card_bursty.pdf> <./picture/stps_long_tail_16card_poisson.pdf> <./picture/stps_
-long_tail_16card_bursty.pdf>]
-<picture/fig_robustness.pdf, id=813, 310.44669pt x 201.5367pt>
-File: picture/fig_robustness.pdf Graphic file (type pdf)
-<use picture/fig_robustness.pdf>
-Package pdftex.def Info: picture/fig_robustness.pdf  used on input line 776.
-(pdftex.def)             Requested size: 173.53496pt x 112.6568pt.
-<picture/fig_scalability.pdf, id=815, 324.84111pt x 208.76369pt>
-File: picture/fig_scalability.pdf Graphic file (type pdf)
-<use picture/fig_scalability.pdf>
-Package pdftex.def Info: picture/fig_scalability.pdf  used on input line 788.
-(pdftex.def)             Requested size: 173.53496pt x 111.52658pt.
- [14
+l.690 
+      
 pdfTeX warning (ext4): destination with the same identifier (name{figure.10}) h
 as been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.802 
-      
-pdfTeX warning (ext4): destination with the same identifier (name{figure.11}) h
-as been already used, duplicate ignored
+l.690 
+       <./picture/fig_robustness.pdf> <./picture/fig_scalability.pdf>]
+Overfull \hbox (30.63681pt too wide) in paragraph at lines 736--746
+ [][] 
+ []
+
+
+Overfull \hbox (11.37943pt too wide) in paragraph at lines 753--768
+ [][] 
+ []
+
+[13]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [14
+pdfTeX warning (ext4): destination with the same identifier (name{table.6}) has
+ been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.802 
-       <./picture/fig_robustness.pdf> <./picture/fig_scalability.pdf>]
-Overfull \hbox (30.63681pt too wide) in paragraph at lines 831--842
- [][] 
- []
-
-
-Overfull \hbox (11.37943pt too wide) in paragraph at lines 849--864
- [][] 
- []
-
-(./article.bbl [15]
+l.800 
+      
+pdfTeX warning (ext4): destination with the same identifier (name{table.7}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.800 
+      
+pdfTeX warning (ext4): destination with the same identifier (name{table.8}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.800 
+      ] (./article.bbl
 Underfull \hbox (badness 1297) in paragraph at lines 33--39
 \T1/ptm/m/n/10 (+20) An-toine Kauf-mann, Ymir Vig-fusson, and Jonathan
  []
@@ -1308,79 +1292,22 @@ Underfull \hbox (badness 10000) in paragraph at lines 81--87
 []\T1/ptm/m/n/10 (+20) Deepak Narayanan, Ke-shav San-thanam, Fio-dar
  []
 
-[16]) [17
+[15]) [16
 
-] [18
-pdfTeX warning (ext4): destination with the same identifier (name{table.1}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    ] [19
-pdfTeX warning (ext4): destination with the same identifier (name{table.2}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-
-
-] [20
-pdfTeX warning (ext4): destination with the same identifier (name{table.3}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-pdfTeX warning (ext4): destination with the same identifier (name{table.4}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-pdfTeX warning (ext4): destination with the same identifier (name{table.5}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    ] [21
-pdfTeX warning (ext4): destination with the same identifier (name{table.6}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-pdfTeX warning (ext4): destination with the same identifier (name{table.7}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-pdfTeX warning (ext4): destination with the same identifier (name{table.8}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    
-pdfTeX warning (ext4): destination with the same identifier (name{table.9}) has
- been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.905 \end{document}
-                    ] (./article.aux)
+] (./article.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
 Package rerunfilecheck Info: File `article.out' has not changed.
-(rerunfilecheck)             Checksum: 8F11DBD3D16D451BD43E9E8B43BB132C;6483.
+(rerunfilecheck)             Checksum: F2A6DE037D0A7788FDDD5AECCF6C00A3;5705.
  ) 
 Here is how much of TeX's memory you used:
- 35977 strings out of 476106
- 818218 string characters out of 5793934
- 1993975 words of memory out of 5000000
- 56683 multiletter control sequences out of 15000+600000
- 708569 words of font info for 518 fonts, out of 8000000 for 9000
+ 35918 strings out of 476106
+ 816484 string characters out of 5793934
+ 1961975 words of memory out of 5000000
+ 56651 multiletter control sequences out of 15000+600000
+ 711396 words of font info for 504 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
  102i,19n,107p,1779b,2201s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></us
@@ -1396,10 +1323,10 @@ re/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/share/texlive/texm
 f-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf-dist/fonts/ty
 pe1/urw/times/utmri8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/zapfch
 an/uzcmi8a.pfb>
-Output written on article.pdf (21 pages, 429259 bytes).
+Output written on article.pdf (16 pages, 346599 bytes).
 PDF statistics:
- 1047 PDF objects out of 1200 (max. 8388607)
- 553 compressed objects within 6 object streams
- 130 named destinations out of 1000 (max. 500000)
- 142164 words of extra memory for PDF output out of 154059 (max. 10000000)
+ 795 PDF objects out of 1000 (max. 8388607)
+ 487 compressed objects within 5 object streams
+ 121 named destinations out of 1000 (max. 500000)
+ 146224 words of extra memory for PDF output out of 154059 (max. 10000000)
 

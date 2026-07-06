@@ -40,13 +40,13 @@ def _load(path: Path):
 
 def main() -> int:
     PIC.mkdir(parents=True, exist_ok=True)
-    d4 = _load(ROOT / "data/q0/arrival_summary.csv")
     d16 = _load(ROOT / "data/q0/scale16_summary.csv")
     METRIC, CI = "avg_congestion_ratio_mean", "avg_congestion_ratio_ci95"
 
-    cells = [("4 cards", a, d4) for a in ARRIVALS] + [("16 cards", a, d16) for a in ARRIVALS]
+    # 16-card main experiment: one cell per arrival mode.
+    cells = [("16 cards", a, d16) for a in ARRIVALS]
 
-    fig, ax = plt.subplots(figsize=(9.0, 3.1))
+    fig, ax = plt.subplots(figsize=(6.2, 3.1))
     n_sched = len(SCHEDULERS)
     group_w = 0.82
     bar_w = group_w / n_sched
@@ -66,11 +66,10 @@ def main() -> int:
                    label=LABELS[s] if gi == 0 else None,
                    zorder=3 if s == "stps" else 2)
         xticks.append(x0)
-        xlabels.append(f"{ARR_LBL[arr]}\n{scale}")
+        xlabels.append(ARR_LBL[arr])
 
     ax.axhline(1.0, color="black", ls="--", lw=0.9, zorder=1)
     ax.text(-0.42, 1.002, "best baseline = 1.0", ha="left", va="bottom", fontsize=7)
-    ax.axvline(2.5, color="gray", lw=0.6, alpha=0.5)
     ax.set_xticks(xticks)
     ax.set_xticklabels(xlabels, fontsize=8)
     ax.set_ylabel("congestion ratio\n(norm. to best baseline)", fontsize=9)
@@ -88,7 +87,7 @@ def main() -> int:
     # sanity: is STPS below 1.0 in every cell?
     ok = all(float(data[("stps", arr)][METRIC]) < min(float(data[(s, arr)][METRIC]) for s in BASELINES)
              for _, arr, data in cells)
-    print(f"STPS below best baseline in all 6 cells: {ok}")
+    print(f"STPS below best baseline in all 3 (16-card) cells: {ok}")
     return 0
 
 

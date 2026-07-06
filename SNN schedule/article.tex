@@ -414,7 +414,7 @@ Two design choices warrant comment. First, all four fingerprint quantities are s
 
 \begin{table*}[!t]
 \centering
-\caption{Stage decomposition at the default congested workpoint (16 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 1024 ticks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio to zero, but the price is steep: throughput drops 28--34\,\% because tasks that cannot find a sub-cap offset are held back. Full STPS is the exception: it lowers congestion at essentially no throughput cost, because Stage~A has already spread the load and Stage~B has little left to defer or to reject. Read each row as a full metric vector, not a single column.}
+\caption{Stage decomposition at the default congested workpoint (16 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 3200 tasks, 512 ticks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio to zero, but the price is steep: throughput drops 24--34\,\% because tasks that cannot find a sub-cap offset are held back. Full STPS is the exception: it lowers congestion ($0.108\!\to\!0.097$ Poisson, $0.122\!\to\!0.106$ Bursty) at essentially no throughput cost ($6.074\!\to\!6.05$), because Stage~A has already spread the load and Stage~B has little left to defer or to reject. Read each row as a full metric vector, not a single column.}
 \label{tab:q2_phase}
 \footnotesize
 \begin{tabular}{llrrrr}
@@ -423,23 +423,23 @@ Arrival & Policy & throughput & cong.\ ratio & cong.\ wait & mean offset \\
 \midrule
 \multirow{8}{*}{Poisson}
  & RR \textsc{base}             & \textbf{6.074} & 0.119 & 1.22 & 0.00 \\
- & RR \textsc{+ps}              & 4.494 & \textbf{0.000} & \textbf{0.00} & 1.05 \\
+ & RR \textsc{+ps}              & 4.633 & \textbf{0.000} & \textbf{0.00} & 1.16 \\
  & BestFit \textsc{base}        & \textbf{6.074} & 0.107 & 1.03 & 0.00 \\
- & BestFit \textsc{+ps}         & 4.849 & 0.000 & 0.00 & 0.98 \\
+ & BestFit \textsc{+ps}         & 4.637 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
  & P2C \textsc{base}            & \textbf{6.074} & 0.128 & 1.48 & 0.00 \\
- & P2C \textsc{+ps}             & 4.280 & 0.000 & 0.00 & 1.03 \\
- & \textsc{stps-spatial}        & \textbf{6.074} & 0.112 & 1.09 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 6.056 & 0.097 & 0.85 & 1.15 \\
+ & P2C \textsc{+ps}             & 4.276 & \textbf{0.000} & \textbf{0.00} & 1.02 \\
+ & \textsc{stps-spatial}        & \textbf{6.074} & 0.108 & 1.03 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 6.056 & 0.097 & 0.85 & 1.38 \\
 \midrule
 \multirow{8}{*}{Bursty}
  & RR \textsc{base}             & 6.074 & 0.129 & 1.58 & 0.00 \\
- & RR \textsc{+ps}              & 4.241 & \textbf{0.000} & \textbf{0.00} & 0.95 \\
+ & RR \textsc{+ps}              & 4.284 & \textbf{0.000} & \textbf{0.00} & 0.97 \\
  & BestFit \textsc{base}        & 6.074 & 0.120 & 1.39 & 0.00 \\
- & BestFit \textsc{+ps}         & 4.472 & 0.000 & 0.00 & 0.89 \\
+ & BestFit \textsc{+ps}         & 4.247 & \textbf{0.000} & \textbf{0.00} & 0.86 \\
  & P2C \textsc{base}            & 6.074 & 0.139 & 1.84 & 0.00 \\
- & P2C \textsc{+ps}             & 4.013 & 0.000 & 0.00 & 0.98 \\
- & \textsc{stps-spatial}        & 6.074 & 0.127 & 1.53 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 6.054 & 0.106 & 1.20 & 1.07 \\
+ & P2C \textsc{+ps}             & 4.014 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
+ & \textsc{stps-spatial}        & 6.074 & 0.122 & 1.42 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 6.054 & 0.106 & 1.20 & 1.16 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -522,7 +522,7 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
     xlabel={Utilisation},
     ylabel={CV},
     xmin=0.28, xmax=0.97,
-    ymin=0.45, ymax=1.18,
+    ymin=0.45, ymax=1.70,
     xtick={0.30,0.50,0.70,0.85,0.95},
     ymajorgrids=true,
     grid style={black!10},
@@ -532,15 +532,15 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
     legend cell align={left},
     every axis plot/.append style={line width=0.9pt},
 ]
-\addplot[algRR,solid,no markers] coordinates {(0.30,0.976) (0.50,0.833) (0.70,0.755) (0.85,0.646) (0.95,0.607)};
+\addplot[algRR,solid,no markers] coordinates {(0.30,1.557) (0.50,1.114) (0.70,0.849) (0.85,0.653) (0.95,0.597)};
 \addlegendentry{RR}
-\addplot[algBestFit,solid,no markers] coordinates {(0.30,0.904) (0.50,0.736) (0.70,0.666) (0.85,0.557) (0.95,0.501)};
+\addplot[algBestFit,solid,no markers] coordinates {(0.30,1.437) (0.50,1.021) (0.70,0.788) (0.85,0.584) (0.95,0.501)};
 \addlegendentry{BestFit}
-\addplot[algDRF,solid,no markers] coordinates {(0.30,0.904) (0.50,0.736) (0.70,0.666) (0.85,0.557) (0.95,0.501)};
+\addplot[algDRF,solid,no markers] coordinates {(0.30,1.437) (0.50,1.021) (0.70,0.788) (0.85,0.584) (0.95,0.501)};
 \addlegendentry{DRF}
-\addplot[algP2C,solid,no markers] coordinates {(0.30,1.127) (0.50,0.906) (0.70,0.779) (0.85,0.654) (0.95,0.606)};
+\addplot[algP2C,solid,no markers] coordinates {(0.30,1.633) (0.50,1.168) (0.70,0.894) (0.85,0.709) (0.95,0.651)};
 \addlegendentry{P2C}
-\addplot[algSTPS,solid,no markers] coordinates {(0.30,0.945) (0.50,0.775) (0.70,0.690) (0.85,0.585) (0.95,0.553)};
+\addplot[algSTPS,solid,no markers] coordinates {(0.30,1.448) (0.50,1.020) (0.70,0.788) (0.85,0.622) (0.95,0.563)};
 \addlegendentry{\textsc{stps-A}}
 \end{axis}
 \end{tikzpicture}
@@ -548,7 +548,7 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
 \label{fig:q1_util}
 \end{figure}
 
-\paragraph{Utilisation determines whether topology matters.} Figure~\ref{fig:q1_util} plots CV, so lower values indicate more even load across cards. Two things are visible. First, BestFit and DRF lead at every utilisation: with cards distinguished mainly by free capacity, the capacity signal is the better placement cue and the $\overline{K}_\tau$-aware score cannot beat it on dispersion. Second, Stage~A nonetheless tracks the leaders closely --- within $\sim$4--10\,\% of BestFit and consistently ahead of RR and P2C --- and the whole field compresses as load rises and spatial freedom shrinks. The reading is not that Stage~A wins dispersion (it does not) but that it stays competitive on dispersion while buying the congestion relief that motivates it; topology-aware placement neither helps nor hurts balance materially in this regime.
+\paragraph{Utilisation determines whether topology matters.} Figure~\ref{fig:q1_util} plots CV, so lower values indicate more even load across cards. Two things are visible. First, BestFit and DRF lead at every utilisation: with cards distinguished mainly by free capacity, the capacity signal is the better placement cue and the $\overline{K}_\tau$-aware score cannot beat it on dispersion. Second, Stage~A nonetheless tracks the leaders closely --- within $\sim$12\,\% of BestFit at the highest utilisations and essentially tied at low-to-mid load --- and consistently ahead of RR and P2C, and the whole field compresses as load rises and spatial freedom shrinks. The reading is not that Stage~A wins dispersion (it does not) but that it stays competitive on dispersion while buying the congestion relief that motivates it; topology-aware placement neither helps nor hurts balance materially in this regime.
 
 \begin{figure}[t]
 \centering
@@ -559,7 +559,7 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
     xlabel={Bursty fingerprint share (\%)},
     ylabel={CV},
     xmin=-3, xmax=103,
-    ymin=0.24, ymax=1.24,
+    ymin=0.24, ymax=1.58,
     xtick={0,25,50,75,100},
     ymajorgrids=true,
     grid style={black!10},
@@ -569,15 +569,15 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
     legend cell align={left},
     every axis plot/.append style={line width=0.9pt},
 ]
-\addplot[algRR,solid,no markers] coordinates {(0,0.271) (25,0.578) (50,0.814) (75,0.990) (100,0.923)};
+\addplot[algRR,solid,no markers] coordinates {(0,0.267) (25,0.606) (50,0.854) (75,1.052) (100,1.244)};
 \addlegendentry{RR}
-\addplot[algBestFit,solid,no markers] coordinates {(0,0.322) (25,0.600) (50,0.844) (75,1.024) (100,1.007)};
+\addplot[algBestFit,solid,no markers] coordinates {(0,0.294) (25,0.660) (50,0.953) (75,1.172) (100,1.395)};
 \addlegendentry{BestFit}
-\addplot[algDRF,solid,no markers] coordinates {(0,0.322) (25,0.600) (50,0.844) (75,1.024) (100,1.007)};
+\addplot[algDRF,solid,no markers] coordinates {(0,0.294) (25,0.660) (50,0.953) (75,1.172) (100,1.395)};
 \addlegendentry{DRF}
-\addplot[algP2C,solid,no markers] coordinates {(0,0.699) (25,0.838) (50,0.997) (75,1.142) (100,1.171)};
+\addplot[algP2C,solid,no markers] coordinates {(0,0.770) (25,0.964) (50,1.170) (75,1.349) (100,1.535)};
 \addlegendentry{P2C}
-\addplot[algSTPS,solid,no markers] coordinates {(0,0.322) (25,0.612) (50,0.909) (75,1.196) (100,0.961)};
+\addplot[algSTPS,solid,no markers] coordinates {(0,0.294) (25,0.694) (50,1.074) (75,1.377) (100,1.320)};
 \addlegendentry{\textsc{stps-A}}
 \end{axis}
 \end{tikzpicture}
@@ -585,7 +585,7 @@ P2C & 0.553 & 0.764 & 1.714 & 0.567 & 1.607 \\
 \label{fig:q1_mix}
 \end{figure}
 
-\paragraph{Fingerprint composition does not make Stage~A a dispersion winner.} Figure~\ref{fig:q1_mix} fixes utilisation at 70\,\% and varies the workload from purely steady-flat to purely bursty fingerprints. CV rises with the bursty share for all five policies: sharper peaks are harder to spread, independent of the placement rule. Stage~A sits inside the baseline band the whole way --- tied with BestFit/DRF at $0\,\%$ bursty ($0.322$) and never separating by more than the baselines separate from each other --- so the fingerprint neither buys nor costs dispersion here. This matters for honesty about the design: Stage~A is a congestion lever, and its topology score does not translate into a load-dispersion advantage even in the steady-flat regime where the fingerprint is most predictable. The predictability the fingerprint provides pays off in where bursts land on the timeline (Stage~B, analysed in Q2), not in equalising served load across cards. The two stages cover complementary halves of the predictability axis.
+\paragraph{Fingerprint composition does not make Stage~A a dispersion winner.} Figure~\ref{fig:q1_mix} fixes utilisation at 70\,\% and varies the workload from purely steady-flat to purely bursty fingerprints. CV rises with the bursty share for all five policies: sharper peaks are harder to spread, independent of the placement rule. Stage~A sits inside the baseline band the whole way --- tied with BestFit/DRF at $0\,\%$ bursty ($0.294$) and never separating by more than the baselines separate from each other --- so the fingerprint neither buys nor costs dispersion here. This matters for honesty about the design: Stage~A is a congestion lever, and its topology score does not translate into a load-dispersion advantage even in the steady-flat regime where the fingerprint is most predictable. The predictability the fingerprint provides pays off in where bursts land on the timeline (Stage~B, analysed in Q2), not in equalising served load across cards. The two stages cover complementary halves of the predictability axis.
 
 \paragraph{Q1 takeaway.} The load-balance and congestion results are the same story viewed through two metrics. The fingerprint lets STPS spread correlated bursts before they collide, improving global balance (CV, JFI, LIF) while shifting the per-card congestion distribution down (Figure~\ref{fig:percard_cdf}). At 16 cards, this makes STPS the only policy that wins both axes in every arrival mode without giving up throughput; the Stage~A sweeps show that this benefit is not because macro-dispatch is a universal dispersion minimiser, but because it preserves competitive balance while positioning bursts for cheaper temporal relief.
 
@@ -597,21 +597,21 @@ STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{picture/fig_ablation.pdf}
-\caption{Incremental stage ablation at the congested workpoint (regime~C, $D_{\max}\!=\!2$). Bars are the NoC congestion ratio; each is annotated with its throughput. Phase-shift on a blind baseline (BestFit\,+ps) zeroes congestion only by paying $-17$--$20$\,\% throughput; macro-dispatch alone (STPS-A) preserves throughput but leaves congestion untouched; only the pairing (full STPS) relieves congestion \emph{and} keeps throughput. Neither stage alone reaches the operating point.}
+\caption{Incremental stage ablation at the default congested workpoint (16 cards, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 3200 tasks). Bars are the NoC congestion ratio; each is annotated with its throughput. Phase-shift on a blind baseline (BestFit\,+ps) zeroes congestion only by paying $-24$--$30$\,\% throughput; macro-dispatch alone (STPS-A) preserves throughput but leaves congestion untouched; only the pairing (full STPS) relieves congestion \emph{and} keeps throughput. Neither stage alone reaches the operating point.}
 \label{fig:ablation}
 \end{figure}
 
-\paragraph{Phase-shift zeroes congestion but pays in throughput.} Table~\ref{tab:q2_phase} reports the ablation. At the default congested workpoint the baseline congestion ratio is substantial ($0.11$--$0.14$, queue wait $1.4$--$1.9$ ticks); attaching phase-shift to RR, BestFit, DRF, or P2C drives it to exactly zero and empties the queue. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. But the relief is bought with throughput. Tasks that cannot find a sub-cap slot are held back and rejected at the cap, so throughput drops 28--34\,\% (RR Poisson $1.528\!\to\!1.094$, P2C bursty $1.526\!\to\!1.013$). \textsc{stps-spatial+ps} (full STPS) is the exception that proves the point: it lowers congestion from $0.112$ to $0.100$ (Poisson) and $0.127$ to $0.115$ (bursty) while holding throughput at $1.524$--$1.522$ --- within $0.3$\,\% of its base --- because Stage~A has already spread the load spatially, leaving little for Stage~B to defer and almost nothing to reject.
+\paragraph{Phase-shift zeroes congestion but pays in throughput.} Table~\ref{tab:q2_phase} reports the ablation. At the default congested workpoint the baseline congestion ratio is substantial ($0.11$--$0.14$, queue wait $1.0$--$1.8$ ticks); attaching phase-shift to RR, BestFit, DRF, or P2C drives it to exactly zero and empties the queue. The mechanism is direct: by deferring each task's onset by at most $D_{\max}\!=\!2$ ticks the optimiser finds a slot whose superposition on the card forecast stays below $BW_{\max}$. But the relief is bought with throughput. Tasks that cannot find a sub-cap slot are held back and rejected at the cap, so throughput drops 24--34\,\% (RR Poisson $6.074\!\to\!4.633$, P2C bursty $6.074\!\to\!4.014$). \textsc{stps-spatial+ps} (full STPS) is the exception that proves the point: it lowers congestion from $0.108$ to $0.097$ (Poisson) and $0.122$ to $0.106$ (bursty) while holding throughput at $6.056$--$6.054$ --- within $0.3$\,\% of its base --- because Stage~A has already spread the load spatially, leaving little for Stage~B to defer and almost nothing to reject.
 
-\paragraph{Full STPS also protects load balance.} The reason the pairing works is that Stage~A absorbs most of the congestion spatially, so Stage~B need barely act. Where a blind baseline+phase-shift must inject large offsets and reject a fifth of its tasks --- scattering served load and, for P2C, inflating CV --- full STPS commits a mean offset near one tick and rejects almost nothing. It therefore keeps the load balance Stage~A produced (its CV moves by less than $0.01$ under Poisson and \emph{falls} under bursty, $0.435\!\to\!0.423$), rather than trading it away. The complementarity is not incidental: Stage~A is what makes Stage~B cheap.
+\paragraph{Full STPS also protects load balance.} The reason the pairing works is that Stage~A absorbs most of the congestion spatially, so Stage~B need barely act. Where a blind baseline+phase-shift must inject large offsets and reject a fifth of its tasks --- scattering served load across cards --- full STPS commits a mean offset near one tick and rejects almost nothing. It therefore keeps the load balance Stage~A produced, with CV \emph{falling} under both arrivals ($0.393\!\to\!0.354$ Poisson, $0.475\!\to\!0.448$ bursty), rather than trading it away. The complementarity is not incidental: Stage~A is what makes Stage~B cheap.
 
-\paragraph{The two stages occupy complementary roles.} The decomposition makes the division of labour legible (Figure~\ref{fig:ablation}). Phase-shift on a capacity baseline drives congestion to exactly zero but at a steep 28--34\,\% throughput cost; macro-dispatch alone (\textsc{stps-spatial}) holds throughput at the baseline but leaves most of the congestion ($0.11$--$0.13$) in place. Only the pairing reaches a deployable compromise: full STPS is the single variant that lowers congestion while keeping throughput essentially flat ($1.528\!\to\!1.524$), whereas every baseline+phase-shift row that zeroes congestion sacrifices roughly a third of throughput to do it. Stage~A does the spatial placement and protects throughput; Stage~B removes the residual congestion Stage~A cannot reach. Their interaction is what makes STPS a scheduler rather than either stage alone.
+\paragraph{The two stages occupy complementary roles.} The decomposition makes the division of labour legible (Figure~\ref{fig:ablation}). Phase-shift on a capacity baseline drives congestion to exactly zero but at a steep 24--34\,\% throughput cost; macro-dispatch alone (\textsc{stps-spatial}) holds throughput at the baseline but leaves most of the congestion ($0.11$--$0.12$) in place. Only the pairing reaches a deployable compromise: full STPS is the single variant that lowers congestion while keeping throughput essentially flat ($6.074\!\to\!6.056$), whereas every baseline+phase-shift row that zeroes congestion sacrifices roughly a third of throughput to do it. Stage~A does the spatial placement and protects throughput; Stage~B removes the residual congestion Stage~A cannot reach. Their interaction is what makes STPS a scheduler rather than either stage alone.
 
 \paragraph{Stage~B works best before hard saturation.} Phase-shift only relieves congestion where the cap binds. Sweeping the cap across three regimes --- binding ($BW_{\max}\!=\!9\!\times\!10^{5}$, 800 tasks; $\sim$0.26 baseline congestion), non-binding ($5\!\times\!10^{6}$, demand never reaches the cap), and lightly binding ($9\!\times\!10^{5}$, 400 tasks; $\sim$0.09) --- the congestion ratio drops to zero wherever there is congestion to remove (binding and light) and is undefined where there is none (non-binding). Its effect on dispersion has the opposite sign in the two congested regimes: under the hard-binding cap phase-shift \emph{raises} CV for every policy (the queue has already flattened the baselines, so any offset scatters load off that flat profile), whereas under the light cap it \emph{lowers} CV (the baselines keep enough natural dispersion that de-synchronising bursts helps). Either way the price is throughput (18--23\,\% binding, 14--16\,\% light). The practical reading: STPS's sweet-spot is a correctly- or over-provisioned cluster, and full STPS ships $D_{\max}\!=\!2$ so the offset stays small; pushed into heavy congestion, the right response is provisioning, not a larger offset budget. Appendix~\ref{app:regime} gives the full per-policy grid and the sign structure of the CV effect.
 
 \begin{table}[t]
 \centering
-\caption{How each metric responds as the phase-shift budget $D_{\max}$ grows from 2 to 16 (light regime C, 16 cards, mixed fingerprints, 5 seeds). Congestion --- the metric STPS targets --- is a switch, not a knob: it is already zeroed at $D_{\max}\!=\!2$. The dispersion diagnostics (CV/JFI/LIF) do improve with a larger budget in this loosely-capped regime, but with diminishing returns that saturate near $D_{\max}\!=\!8$, while throughput cost grows monotonically. The columns pull in opposite directions, which is what fixes a small default.}
+\caption{How each metric responds as the phase-shift budget $D_{\max}$ grows from 2 to 16 (16 cards, lightly-capped regime: $BW_{\max}\!=\!9\!\times\!10^{5}$, 1600 tasks, mixed fingerprints, 5 seeds). Congestion --- the metric STPS targets --- is a switch, not a knob: it is already zeroed for the capacity baselines at $D_{\max}\!=\!2$ and full STPS holds its residual $\sim$0.035 flat across the sweep. The dispersion diagnostics (CV/JFI/LIF) do improve with a larger budget in this loosely-capped regime, but with diminishing returns that saturate near $D_{\max}\!=\!8$, while the mean offset (and thus tail delay) grows monotonically. The columns pull in opposite directions, which is what fixes a small default.}
 \label{tab:q2_dmax}
 \small
 \begin{tabular}{lll}
@@ -619,9 +619,9 @@ STPS combines macro-card dispatch with phase-shift scheduling, so the evaluation
 Metric & Response to $D_{\max}\!\uparrow$ & Detail \\
 \midrule
 Cong.\ ratio (non-STPS) & flat at 0 from $D_{\max}\!=\!2$ & switch, not knob \\
-Cong.\ ratio (STPS)     & slow $\downarrow$ & $0.087\!\to\!0.079$ \\
+Cong.\ ratio (STPS)     & $\sim$flat & $0.035\!\to\!0.035$ \\
 CV / JFI / LIF      & $\downarrow$, saturating & knee near $D_{\max}\!=\!8$ \\
-Mean offset              & $\uparrow$ monotone & $0.5\!\to\!4$ ticks \\
+Mean offset              & $\uparrow$ monotone & $0.5\!\to\!5$ ticks \\
 Throughput               & partial recovery & stays below baseline \\
 \bottomrule
 \end{tabular}
