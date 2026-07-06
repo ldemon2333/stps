@@ -6,7 +6,7 @@ bars per cell. Congestion ratio is normalized so the *best baseline* in each
 cell = 1.0 (dashed line). STPS is the only policy whose bar sits below 1.0 in
 every cell; baselines trade leadership. 95% CI error bars.
 
-Reads data/q0/arrival_summary.csv (4-card) + data/q0/scale16_summary.csv
+Reads data/q0/scale16_summary.csv (16-card main experiment).
 (16-card). Writes SNN schedule/picture/fig_congestion_bars.pdf.
 """
 from __future__ import annotations
