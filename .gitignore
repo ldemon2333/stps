@@ -32,6 +32,24 @@ test.py
 test.sh
 *.bak
 
+# --- LaTeX build artifacts ---
+# The paper (SNN schedule/article.tex) is the source of truth; all compiled
+# byproducts are regenerable via pdflatex+bibtex and stay out of the repo.
+# NOTE: picture/*.pdf are figure *inputs* (plot-script outputs) and remain tracked.
+SNN schedule/build/
+SNN schedule/article.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+
 # --- Large datasets / models ---
 # ImageNet-100 imagery (fetched via script/fetch_imagenet100_val.py)
 dataset/imagenet/

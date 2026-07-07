@@ -429,32 +429,33 @@ Two design choices warrant comment. First, all four fingerprint quantities are s
 
 \begin{table*}[!t]
 \centering
-\caption{Stage decomposition at the default congested workpoint (16 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 3200 tasks, 512 ticks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio to zero, but the price is steep: throughput drops 24--34\,\% because tasks that cannot find a sub-cap offset are held back. Full STPS is the exception: it lowers congestion ($0.108\!\to\!0.097$ Poisson, $0.122\!\to\!0.106$ Bursty) at essentially no throughput cost ($6.074\!\to\!6.05$), because Stage~A has already spread the load and Stage~B has little left to defer or to reject. Read each row as a full metric vector, not a single column.}
+\caption{Stage decomposition at the default congested workpoint (16 cards, mixed fingerprints, $BW_{\max}\!=\!9\!\times\!10^{5}$, $D_{\max}\!=\!2$, 3200 tasks, 512 ticks, 5 seeds): each spatial policy (\textsc{base}) paired with phase-shift (\textsc{+ps}), and STPS's own macro-dispatch \textsc{stps-spatial} with phase-shift added; the full scheduler is \textsc{stps-spatial+ps}. Attaching phase-shift to a capacity baseline drives the congestion ratio to zero, but the price is steep: throughput drops 24--34\,\% because tasks that cannot find a sub-cap offset are held back. Full STPS is the exception: it lowers congestion ($0.108\!\to\!0.097$ Poisson, $0.122\!\to\!0.106$ Bursty) at essentially no throughput cost ($6.074\!\to\!6.05$), because Stage~A has already spread the load and Stage~B has little left to defer or to reject. The balance columns (CV/JFI/LIF) tell the same story --- phase-shift on a blind baseline can post the best CV/JFI (e.g.\ BestFit\,\textsc{+ps}), but only at that throughput cost, whereas full STPS holds balance and throughput together. Read each row as a full metric vector, not a single column.}
 \label{tab:q2_phase}
 \footnotesize
-\begin{tabular}{llrrrr}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llrrrrrrr}
 \toprule
-Arrival & Policy & throughput & cong.\ ratio & cong.\ wait & mean offset \\
+Arrival & Scheduler & CV $\downarrow$ & JFI $\uparrow$ & LIF $\downarrow$ & tput $\uparrow$ & cong. ratio $\downarrow$ & cong. wait $\downarrow$ & mean offset \\
 \midrule
 \multirow{8}{*}{Poisson}
- & RR \textsc{base}             & \textbf{6.074} & 0.119 & 1.22 & 0.00 \\
- & RR \textsc{+ps}              & 4.633 & \textbf{0.000} & \textbf{0.00} & 1.16 \\
- & BestFit \textsc{base}        & \textbf{6.074} & 0.107 & 1.03 & 0.00 \\
- & BestFit \textsc{+ps}         & 4.637 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
- & P2C \textsc{base}            & \textbf{6.074} & 0.128 & 1.48 & 0.00 \\
- & P2C \textsc{+ps}             & 4.276 & \textbf{0.000} & \textbf{0.00} & 1.02 \\
- & \textsc{stps-spatial}        & \textbf{6.074} & 0.108 & 1.03 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 6.056 & 0.097 & 0.85 & 1.38 \\
+ & RR \textsc{base}             & 0.430 & 0.842 & 1.533 & \textbf{6.074} & 0.119 & 1.22 & 0.00 \\
+ & RR \textsc{+ps}              & 0.390 & 0.861 & 1.741 & 4.633 & \textbf{0.000} & \textbf{0.00} & 1.16 \\
+ & BestFit \textsc{base}        & 0.388 & 0.867 & 1.563 & \textbf{6.074} & 0.107 & 1.03 & 0.00 \\
+ & BestFit \textsc{+ps}         & \textbf{0.348} & \textbf{0.890} & 1.759 & 4.637 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
+ & P2C \textsc{base}            & 0.531 & 0.779 & 1.598 & \textbf{6.074} & 0.128 & 1.48 & 0.00 \\
+ & P2C \textsc{+ps}             & 0.599 & 0.736 & 2.106 & 4.276 & \textbf{0.000} & \textbf{0.00} & 1.02 \\
+ & \textsc{stps-spatial}        & 0.393 & 0.864 & 1.552 & \textbf{6.074} & 0.108 & 1.03 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 0.354 & 0.885 & \textbf{1.522} & 6.056 & 0.097 & 0.85 & 1.38 \\
 \midrule
 \multirow{8}{*}{Bursty}
- & RR \textsc{base}             & 6.074 & 0.129 & 1.58 & 0.00 \\
- & RR \textsc{+ps}              & 4.284 & \textbf{0.000} & \textbf{0.00} & 0.97 \\
- & BestFit \textsc{base}        & 6.074 & 0.120 & 1.39 & 0.00 \\
- & BestFit \textsc{+ps}         & 4.247 & \textbf{0.000} & \textbf{0.00} & 0.86 \\
- & P2C \textsc{base}            & 6.074 & 0.139 & 1.84 & 0.00 \\
- & P2C \textsc{+ps}             & 4.014 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
- & \textsc{stps-spatial}        & 6.074 & 0.122 & 1.42 & 0.00 \\
- & \textbf{stps-spatial+ps}     & 6.054 & 0.106 & 1.20 & 1.16 \\
+ & RR \textsc{base}             & 0.515 & 0.781 & 1.885 & \textbf{6.074} & 0.129 & 1.58 & 0.00 \\
+ & RR \textsc{+ps}              & 0.527 & 0.781 & 2.069 & 4.284 & \textbf{0.000} & \textbf{0.00} & 0.97 \\
+ & BestFit \textsc{base}        & 0.471 & 0.807 & 1.879 & \textbf{6.074} & 0.120 & 1.39 & 0.00 \\
+ & BestFit \textsc{+ps}         & \textbf{0.434} & \textbf{0.838} & 1.957 & 4.247 & \textbf{0.000} & \textbf{0.00} & 0.86 \\
+ & P2C \textsc{base}            & 0.599 & 0.733 & 1.952 & \textbf{6.074} & 0.139 & 1.84 & 0.00 \\
+ & P2C \textsc{+ps}             & 0.658 & 0.702 & 2.293 & 4.014 & \textbf{0.000} & \textbf{0.00} & 0.94 \\
+ & \textsc{stps-spatial}        & 0.475 & 0.804 & 1.868 & \textbf{6.074} & 0.122 & 1.42 & 0.00 \\
+ & \textbf{stps-spatial+ps}     & 0.448 & 0.824 & \textbf{1.789} & 6.054 & 0.106 & 1.20 & 1.16 \\
 \bottomrule
 \end{tabular}
 \end{table*}
