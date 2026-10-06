@@ -1,6 +1,6 @@
 # Q1 实验设计：Spatial Load Balancing via Step A
 
-> 对应 [article.tex](../article.tex) §6.2（`\subsection{Q1: Spatial Load Balancing via Step A}`）。
+> 对应 [article.tex](../article/article.tex) §6.2（`\subsection{Q1: Spatial Load Balancing via Step A}`）。
 > 目标：验证 STPS 的 **Step A（Macro-Card Dispatching）** 在 $M=4$ 卡 / 1024 核集群上比 RR / BestFit / DRF / P2C 显著降低空间碎片化。
 
 ## 1. 实验目标
@@ -147,7 +147,7 @@ Steady-Flat / Sparse-Bursty 任务比例扫 `{100/0, 75/25, 50/50, 25/75, 0/100}
 3. [schedule/base.py](../schedule/base.py)：`BaseScheduler.__init__` 删除 `alpha/beta`；`_record_migration` 用 `task.current_traffic` 作 task_load；`calculate_load(card)` 改为 `card.calculate_load()`。
 4. baseline schedulers（[bestfit.py](../schedule/bestfit.py)、[roundrobin.py](../schedule/roundrobin.py)、[drf.py](../schedule/drf.py)、[p2c.py](../schedule/p2c.py)）：`record_physical_tick` 全部改为 `card_epoch_load[c.id] += sum(t.current_traffic for t in c.tasks)`，构造函数删除 `alpha/beta`。
 5. [schedule/stps.py](../schedule/stps.py)：同上；删除 `alpha/beta`。
-6. [schedule/placement_strategy.py](../schedule/placement_strategy.py)：删除 `alpha/beta`；P2C `weighted` 分支改为用 `_estimated_task_traffic(task) = mean(fp.E)` 作为新任务的预估贡献。
+6. `schedule/placement_strategy.py`（历史计划，当前仓库无此文件）：删除 `alpha/beta`；P2C `weighted` 分支改为用 `_estimated_task_traffic(task) = mean(fp.E)` 作为新任务的预估贡献。
 7. [simulation/engine.py](../simulation/engine.py)：
    - 删除 `alpha/beta/DEFAULT_ALPHA/DEFAULT_BETA`。
    - `_load_fingerprint_dir` 改为强约束：未提供 / 不存在 / 空目录 → 直接 raise，不再走 synthetic-fallback。

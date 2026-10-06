@@ -1,108 +1,49 @@
-# CLAUDE.md
+# Repository guidance
 
-Guidance for Claude Code when working in this repository.
+This repository contains the experimental simulator for the paper [article/article.tex](article/article.tex), **STPS: Spatio-Temporal Proactive Scheduling for Spiking Neural Networks on Compute-in-Memory Clusters**. `AGENTS.md` delegates agent guidance to this file. Keep the paper and its reproducibility trail central when working here.
 
-## Project Overview
+## Source of truth and layout
 
-**STPS** (Spatio-Temporal Proactive Scheduling) — a simulation framework for scheduling Spiking Neural Network (SNN) inference tasks on a multi-card Compute-in-Memory (CIM / Darwin) cluster. The framework decouples the NP-hard time-dependent MINLP scheduling problem into:
+- `article/article.tex` is the paper source. Its relative `picture/` inputs, `tables/`, `references.bib`, and `usenix-2019-v3.sty` stay together in `article/`. Compile from that directory.
+- `main.py` is the single-run CLI; `simulation/engine.py` runs arrivals, admission, physical ticks, queues, completions, and metrics. `util/` holds card/task models and metric writers.
+- `fingerprint/` builds and loads SNN traffic fingerprints; `npz/` is a local fingerprint directory. Binary inputs are ignored by Git. See `docs/fingerprint.md` for the current format.
+- `schedule/` holds STPS, its ablations, RR/BestFit/DRF/P2C and phase wrappers. The scheduler registry supplies `main.py --list-schedulers`.
+- `script/` contains experiment and figure entrypoints; `data/` holds local CSV results, `figures/` and `article/picture/` hold local figure artifacts. These generated directories are ignored by Git. `docs/` records experiment setup and metric definitions; `tests/` tests simulator behavior.
+- `extras/` and `archive/` hold local materials outside the versioned paper simulator.
 
-1. **Offline DTDG workload fingerprinting** (`fingerprint/`) — turns an SNN trace into a Discrete-Time Dynamic Graph and extracts four physical fingerprints: traffic timeline `E^(t)`, global burstiness `β`, in-eigenvector centrality variance `Var(c^(t))`, and active connected components `K̄`.
-2. **Online 3-stage hierarchical scheduler** (`schedule/stps.py`) — Macro-Card Dispatching → Micro-Temporal Phase-Shifting (Algorithm 1) → Micro-Spatial Mapping with Hotspot Splitting.
+The legacy `SNN schedule/` path is a symlink to `article/`. Some existing figure and table scripts still write through that path. Preserve this alias if code is not being changed. Do not recreate a second paper tree.
 
-Language: Python. Workflow driver: `Makefile`. Project Python interpreter: `/root/miniconda3/envs/snn/bin/python` (conda env `snn`). Use this interpreter for tests, scripts, fingerprint extraction, and Make targets unless the user says otherwise. See [article.tex](article.tex) §4 for the full design and [docs/stps.md](docs/stps.md) for the code-side bridge.
+## Paper-to-code boundaries
 
-## Architecture
+The current paper presents an offline fingerprint and two online decisions: card dispatch and bounded phase shift. `schedule/stps.py` also records hotspot split candidates as `task.split_plan`; this is not a physical remapping step in the simulator. Check the implementation and the particular experiment data before claiming an effect. This is a discrete-time simulation, not a hardware measurement.
 
-- [main.py](main.py) — CLI entry point. Parses args and calls `simulation.engine.run_simulation`.
-- [fingerprint/](fingerprint/) — offline DTDG fingerprint extraction:
-  - `__init__.py` — `Fingerprint` dataclass + public API
-  - `centrality.py` — power-iteration in-eigenvector centrality
-  - `extractor.py` — `extract_fingerprint_from_W(W)` over a `(T, V, V)` weight tensor
-  - `dtdg.py` — `DTDGBuilder.from_spikingjelly(...)` (lazy torch import)
-  - `synth.py` — synthetic fingerprint generator (no torch needed)
-  - `io.py` — `.npz` save/load
-  - `cli.py` — `python -m fingerprint.cli`
-- [schedule/](schedule/) — pluggable schedulers, registered via `schedule/__init__.py`:
-  - `stps.py` — `STPSScheduler`, `STPSSpatialScheduler`, `STPSTemporalScheduler` (the main algorithm + ablations)
-  - `phase_shift.py` — Algorithm 1 (cross-correlation kernel for Stage 2)
-  - `hotspot_split.py` — centrality-driven population splitting helper for Stage 3
-  - `bestfit.py`, `drf.py`, `p2c.py`, `roundrobin.py` — baselines
-  - `placement_strategy.py` — shared placement helpers (e.g. `_estimated_task_traffic`)
-  - `base.py` — `BaseScheduler`, scheduler registry
-- [simulation/engine.py](simulation/engine.py) — simulation lifecycle (arrivals, placement, two-tier ticks, metrics, completions). Loads fingerprints from `--fingerprint-dir`, gates `Task.simulate_tick` on `start_offset` for STPS.
-- [util/](util/) — `card.py` (resource model + lazy forecast timeline + `beta_card`), `task.py` (task model + STPS fields), `sim.py`, `metrics.py`.
-- Output dirs: `data/` (CSVs), `log/` (run logs), `npz/` (`.npz` fingerprints).
+The paper's evaluation setup uses different parameters from the convenient Makefile and `main.py` defaults. For a result claim, identify the script, CSV, seeds, scheduler variant, cards, tasks, steps, bandwidth cap, and metric definition. Preserve the distinction between existing recorded artifacts and a run verified in the current workspace. Use `article/experiment_regen.md` and relevant `docs/Q*_result.md` as provenance pointers, then verify claims against local CSV and source. The CSVs, NPZ inputs, and paper figure binaries are not shipped in Git.
 
-## Common Commands
+## Commands
 
-Defaults: `CARDS=4 TASKS=512 STEPS=512 SEED=21 ARRIVAL_MODE=bursty`.
+The environment previously used for this project is `/root/miniconda3/envs/snn/bin/python`; Makefile uses it by default and accepts `PYTHON=...` override.
 
-Use the project interpreter explicitly when running Python directly:
 ```bash
-/root/miniconda3/envs/snn/bin/python -m pytest tests/
 /root/miniconda3/envs/snn/bin/python main.py --list-schedulers
+/root/miniconda3/envs/snn/bin/python -m pytest tests/
+make q0
+make q1
+python script/q2_run.py main4
 ```
 
-Baselines:
-```bash
-make bestfit drf p2c rr      # run individually or chain on one line
-make compare                 # all baselines
-```
-
-STPS family (paper §4.3):
-```bash
-make fingerprints            # generate synthetic *.npz fingerprints into npz/
-make stps                    # full 3-stage STPS
-make stps-spatial            # ablation: Stage 1 + Stage 3 only (no phase shift)
-make stps-temporal           # ablation: Stage 2 only (no fragmentation / no hotspot split)
-make compare-stps            # baselines + STPS family for paper Q1/Q3
-```
-
-Override knobs via env vars: `CARDS=8 TASKS=200 ARRIVAL_MODE=poisson SEED=99 BW_MAX=5e6 make stps`.
-
-Direct CLI:
-```bash
-python main.py --scheduler stps --cards 4 --tasks 128 --steps 128 \
-    --arrival-mode bursty --fingerprint-dir npz \
-    --bw-max 5e6 --d-max 16 --horizon 64
-python main.py --list-schedulers
-```
-
-Offline fingerprint extraction:
+`make q0`, `make q1`, and the Q2 runner can run substantial experiment matrices and write into existing result directories. The current `make q2-scale16` target passes `scale16`, which `script/q2_run.py` does not accept; use the runner directly with `main16` for that scale. For a small simulator run, call `main.py` with explicit `--cards`, `--tasks`, `--steps`, `--seed`, `--arrival-mode`, `--fingerprint-dir`, `--bw-max`, and `--d-max`; inspect `python main.py --help` for current flags. Makefile defaults: `CARDS=4`, `TASKS=512`, `STEPS=512`, `SEED=21`, `ARRIVAL_MODE=bursty`, `FINGERPRINT_DIR=npz`, `BW_MAX=5e6`, `D_MAX=16`, `HORIZON=64`. These are not the paper's default evaluation workpoint.
 
 ```bash
-python -m fingerprint.cli --synthetic --T 64 --beta 4 --K 2 \
-    --out npz/synthetic_bursty.npz
+cd article
+latexmk -pdf -interaction=nonstopmode -outdir=build article.tex
 ```
 
-Cleanup: `make clean` removes `log/*.log`, `data/*.csv`, `figures/*`.
+The paper build needs six `article/picture/*.pdf` inputs. Generate them with the plotting scripts or restore them locally before compiling a fresh clone.
 
-## Key Parameters
+## Maintenance conventions
 
-| Var | Default | Meaning |
-|-----|---------|---------|
-| `CARDS` | 4 | accelerator card count |
-| `TASKS` | 512 | total tasks scheduled |
-| `STEPS` | 512 | simulation time steps |
-| `SEED` | 21 | RNG seed |
-| `ARRIVAL_MODE` | bursty | `poisson` / `bursty` / `mixed` |
-| `FINGERPRINT_DIR` | `npz` | dir of `.npz` fingerprints (STPS only) |
-| `BW_MAX` | `5e6` | NoC bandwidth ceiling per card |
-| `D_MAX` | 16 | max phase-shift delay (ticks) |
-| `HORIZON` | 64 | forecast traffic horizon (ticks) |
-| `SPLIT_THRESHOLD` | 0.2 | hotspot-split threshold on centrality |
-
-## Conventions
-
-- New schedulers go in `schedule/`, subclass `BaseScheduler`, override `select_card_for_task`, and register via `register_scheduler(...)` so `--list-schedulers` and Make targets pick them up.
-- Fingerprint files are `.npz` produced by `fingerprint.io.save_fingerprint`; the schema is documented in [docs/stps.md](docs/stps.md). Tasks reference fingerprints by path (lazy-loaded inside `STPSScheduler._resolve_fingerprint`).
-- Data filename pattern: `data/{scheduler}_loads_*.csv` and `data/{scheduler}_summary_*.csv`. Use `--data-output <prefix>` (or `DATA_OUTPUT=<prefix>`) to override timestamp-based names.
-- Keep CLI args in [main.py](main.py) and Makefile `COMMON_ARGS` / `STPS_ARGS` in sync when adding parameters.
-- STPS knobs (`--fingerprint-dir`, `--bw-max`, `--d-max`, `--horizon`, `--centrality-split-threshold`) are no-ops for non-STPS schedulers; defaults are chosen so existing baseline runs are bit-equivalent.
-
-## Documentation
-
-- [README.md](README.md) — quick start
-- [article.tex](article.tex) — paper source (§4 = SYSTEM DESIGN, §5 = Evaluation)
-- [docs/stps.md](docs/stps.md) — code-side bridge for the STPS design
-- [TODO.md](TODO.md) — implementation plan (kept for traceability)
+- Keep paper citations and figure paths relative to `article/`; README and docs should link to `article/article.tex` from the repository root.
+- Keep local `data/` CSVs and `.npz` inputs available during experiments. They are ignored by Git along with result figures, runtime logs, Python caches, LaTeX auxiliary files, and W&B logs.
+- Do not run `make clean` as a general repository cleanup: its target removes top-level CSVs and figure files.
+- When changing code, keep CLI arguments, Makefile calls, output paths, and documentation aligned. Place schedulers in `schedule/`, register them through `schedule/base.py`, and test the affected behavior.
+- Preserve unrelated workspace modifications and avoid committing unless requested.

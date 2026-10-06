@@ -309,7 +309,7 @@ full STPS 的 congestion 反而不是最低。这个表如果只看单列，会�
 
 ## 0. 先决：核实现有 `tab:q0_main` 数值的真实出处 ⚠️ 阻塞项
 
-**问题**：现有 RQ1 主表 (`SNN schedule/article.tex`, `tab:q0_main`) 的 `max/min`
+**问题**：现有 RQ1 主表 (`article/article.tex`, `tab:q0_main`) 的 `max/min`
 列与仓库里**任何** CSV 都对不上。例如表里 4-card Poisson `RR max/min = 7.42`，
 但 `data/q0/arrival_summary.csv` 同 cell 是 `5.01`；其余 CSV 也无一行能同时
 匹配该表的 `CV` 与 `max/min`。

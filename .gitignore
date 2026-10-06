@@ -1,61 +1,62 @@
-# --- Python ---
+# Local configuration and Python tooling
+.env
+.venv/
 __pycache__/
 .pytest_cache/
-
-# --- Editor / tooling ---
 .vscode/
 .github/
-.claude
+.claude/
 .codex
-overleaf
+overleaf/
 
-# --- Local config / secrets ---
-.env
-
-# --- Generated outputs ---
-# Experiment result CSVs (summaries + aggregated raw that back the paper tables
-# and the supplementary experiments) are tracked for reproducibility. Only the
-# transient per-simulation byproducts and large regenerable raw dumps stay
-# ignored.
-data/**/_raw/
-data/**/*_task_delays.csv
+# Local datasets, model weights, fingerprints, and experiment outputs
+dataset/
+model/STEP/
+*.pth
+*.pt
+*.ckpt
+*.npz
+npz/*
+!npz/README.md
+data/
+figures/
+article/picture/
 results/
 log/
-plot/*.png
-
-# --- Experiment tracking & logs ---
 wandb/
+plot/
+
+# Material outside the paper simulator
+archive/
+extras/
+
+# Generated documents, logs, and temporary files
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.doc
+*.docx
+*.pptx
+*.zip
+*.csv
+*.log
 *-debug.log
-
-# --- Scratch / backups ---
-test.py
-test.sh
-*.bak
-
-# --- LaTeX build artifacts ---
-# The paper (SNN schedule/article.tex) is the source of truth; all compiled
-# byproducts are regenerable via pdflatex+bibtex and stay out of the repo.
-# NOTE: picture/*.pdf are figure *inputs* (plot-script outputs) and remain tracked.
-SNN schedule/build/
-SNN schedule/article.pdf
 *.aux
 *.bbl
 *.blg
 *.fdb_latexmk
 *.fls
-*.log
 *.out
 *.synctex.gz
 *.toc
 *.lof
 *.lot
-
-# --- Large datasets / models ---
-# ImageNet-100 imagery (fetched via script/fetch_imagenet100_val.py)
-dataset/imagenet/
-model/STEP/
-# CIFAR-10 dataset archives & batches
-dataset/cifar-10-python.tar.gz
-dataset/cifar-10-batches-py/
-# Model weight checkpoints
-*.pth
+*.xdv
+*.bak
+*.pyc
+*.pyo
+article/build/
+test.py
+test.sh

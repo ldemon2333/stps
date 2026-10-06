@@ -1,6 +1,6 @@
 # Q0 实验设计：端到端卡间负载均衡度
 
-> 对应 [article.tex](../article.tex) §6（端到端调度评估，先于 Q1/Q2/Q3 的拆分消融）。
+> 对应 [article.tex](../article/article.tex) §6（端到端调度评估，先于 Q1/Q2/Q3 的拆分消融）。
 > 目标：在完整的 STPS（3 stage）与所有 baseline 算法之间,比较**端到端**意义下
 > **卡间负载均衡度**,检验 STPS 作为整套策略相对 RR / BestFit / DRF / P2C 的真实收益与边界。
 
@@ -89,7 +89,7 @@ $$
 
 ## 3. 评测指标(卡间负载均衡度)
 
-设 $L_{m,t}$ 为卡 $m \in \{1..M\}$ 在 tick $t$ 的样本级实测注入负载,即 [docs/load_TODO.md](load_TODO.md) §1-4 中定义的 `MeasuredInjectionLoad`。仿真执行时不再用 validation mean 直接评价负载,而是把卡上所有已真实启动任务的 `sample_measured_injection_trace` 按启动时刻叠加。逐 tick 计算后在 **稳态窗口** 内取算术平均。
+设 $L_{m,t}$ 为卡 $m \in \{1..M\}$ 在 tick $t$ 的样本级实测注入负载,即 历史计划中定义的 `MeasuredInjectionLoad`。仿真执行时不再用 validation mean 直接评价负载,而是把卡上所有已真实启动任务的 `sample_measured_injection_trace` 按启动时刻叠加。逐 tick 计算后在 **稳态窗口** 内取算术平均。
 
 | 指标 | 公式 | 期望方向 | 现状 |
 |------|------|----------|------|
