@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "units": {
+    "traffic": "flits_per_logical_tick",
+    "compute": "sops_per_logical_tick"
+  },
+  "state_size_mb": 1.4,
+  "source": "synthetic:cluster-demo:fan_in",
+  "metadata": {
+    "calibration": "known synthetic profile; separate task-level means only",
+    "compute_model": "independent manually specified SOP trace",
+    "description": "six-population destination fan-in with shared ejection bottleneck",
+    "flit_model": "one abstract spike packet is one flit",
+    "provenance": "manually specified stimulus; not measured SNN inference"
+  },
+  "pop_size": [
+    32,
+    32,
+    32,
+    32,
+    32,
+    32
+  ],
+  "edge_src": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "edge_dst": [
+    5,
+    5,
+    5,
+    4,
+    5,
+    5
+  ],
+  "edge_expected_flits": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      3.0,
+      2.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      2.0
+    ],
+    [
+      12.0,
+      8.0,
+      6.0,
+      4.0,
+      6.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      4.0,
+      3.0,
+      2.0,
+      1.0,
+      2.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "compute_sops": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      40.0,
+      30.0,
+      20.0,
+      30.0,
+      40.0,
+      140.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      40.0,
+      40.0,
+      120.0
+    ],
+    [
+      100.0,
+      100.0,
+      80.0,
+      80.0,
+      140.0,
+      300.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      40.0,
+      30.0,
+      20.0,
+      20.0,
+      30.0,
+      160.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

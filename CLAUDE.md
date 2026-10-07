@@ -1,49 +1,47 @@
 # Repository guidance
 
-This repository contains the experimental simulator for the paper [article/article.tex](article/article.tex), **STPS: Spatio-Temporal Proactive Scheduling for Spiking Neural Networks on Compute-in-Memory Clusters**. `AGENTS.md` delegates agent guidance to this file. Keep the paper and its reproducibility trail central when working here.
+AGENTS.md delegates here. The active code implements fixed single-card replay plus online multi-card baseline placement using the same elastic NoC model. Paper source article/article.tex and historical results must not be represented as results of the new network.
 
-## Source of truth and layout
+## Source of truth
 
-- `article/article.tex` is the paper source. Its relative `picture/` inputs, `tables/`, `references.bib`, and `usenix-2019-v3.sty` stay together in `article/`. Compile from that directory.
-- `main.py` is the single-run CLI; `simulation/engine.py` runs arrivals, admission, physical ticks, queues, completions, and metrics. `util/` holds card/task models and metric writers.
-- `fingerprint/` builds and loads SNN traffic fingerprints; `npz/` is a local fingerprint directory. Binary inputs are ignored by Git. See `docs/fingerprint.md` for the current format.
-- `schedule/` holds STPS, its ablations, RR/BestFit/DRF/P2C and phase wrappers. The scheduler registry supplies `main.py --list-schedulers`.
-- `script/` contains experiment and figure entrypoints; `data/` holds local CSV results, `figures/` and `article/picture/` hold local figure artifacts. These generated directories are ignored by Git. `docs/` records experiment setup and metric definitions; `tests/` tests simulator behavior.
-- `extras/` and `archive/` hold local materials outside the versioned paper simulator.
-
-The legacy `SNN schedule/` path is a symlink to `article/`. Some existing figure and table scripts still write through that path. Preserve this alias if code is not being changed. Do not recreate a second paper tree.
-
-## Paper-to-code boundaries
-
-The current paper presents an offline fingerprint and two online decisions: card dispatch and bounded phase shift. `schedule/stps.py` also records hotspot split candidates as `task.split_plan`; this is not a physical remapping step in the simulator. Check the implementation and the particular experiment data before claiming an effect. This is a discrete-time simulation, not a hardware measurement.
-
-The paper's evaluation setup uses different parameters from the convenient Makefile and `main.py` defaults. For a result claim, identify the script, CSV, seeds, scheduler variant, cards, tasks, steps, bandwidth cap, and metric definition. Preserve the distinction between existing recorded artifacts and a run verified in the current workspace. Use `article/experiment_regen.md` and relevant `docs/Q*_result.md` as provenance pointers, then verify claims against local CSV and source. The CSVs, NPZ inputs, and paper figure binaries are not shipped in Git.
+- main.py uses --scenario for fixed mapping or --cluster-scenario + --policy for online RR/WorstFit/DRU/BestFit/P2C-Mean/STPS. No legacy FIFO.
+- simulation/scenario.py validates schema_version=1 JSON, earliest start_tick, explicit mapping, single-task capacity and workload paths.
+- fingerprint/workload.py owns directed traffic plus independent SOP in JSON/no-pickle NPZ. Aggregate E-only input is rejected.
+- fingerprint/dtdg.py captures explicitly named model modules; fingerprint/extractor.py uses caller-supplied topology. Slicing/mask/edge helpers are offline, not physical placement.
+- simulation/noc.py is deterministic single-VC XY with bounded source/router/sink queues; decisions read old state and commit atomically.
+- simulation/engine.py runs fixed K-cycle physical ticks. Queues persist across ticks; all active tasks wait at the card-wide Rx barrier before issuing their next logical step. SOP/traffic are issued once. Actual core/memory lifetimes control admission; max_ticks truncation exits 2.
+- util/metrics.py writes core/task/card CSV plus queues/links. simulation/report.py renders self-contained HTML/SVG.
+- examples/single_card uses synthetic sparse traces. script/validate_single_card.py runs positive, carry-over, buffer, manually staggered and truncated scenes.
+- docs/hyperparam.md and docs/metrics.md list parameters/outputs; docs/arch.md and docs/experiment.md describe current behavior. docs/rfc.md and docs/algo.md also mark future scheduling work.
 
 ## Commands
 
-The environment previously used for this project is `/root/miniconda3/envs/snn/bin/python`; Makefile uses it by default and accepts `PYTHON=...` override.
-
 ```bash
-/root/miniconda3/envs/snn/bin/python main.py --list-schedulers
-/root/miniconda3/envs/snn/bin/python -m pytest tests/
-make q0
-make q1
-python script/q2_run.py main4
+python -m pytest -q tests/
+python script/validate_single_card.py --output-root data/phase1
+python main.py --scenario examples/single_card/positive.json --output-dir data/new_run --trace
 ```
 
-`make q0`, `make q1`, and the Q2 runner can run substantial experiment matrices and write into existing result directories. The current `make q2-scale16` target passes `scale16`, which `script/q2_run.py` does not accept; use the runner directly with `main16` for that scale. For a small simulator run, call `main.py` with explicit `--cards`, `--tasks`, `--steps`, `--seed`, `--arrival-mode`, `--fingerprint-dir`, `--bw-max`, and `--d-max`; inspect `python main.py --help` for current flags. Makefile defaults: `CARDS=4`, `TASKS=512`, `STEPS=512`, `SEED=21`, `ARRIVAL_MODE=bursty`, `FINGERPRINT_DIR=npz`, `BW_MAX=5e6`, `D_MAX=16`, `HORIZON=64`. These are not the paper's default evaluation workpoint.
+Python >=3.10 + NumPy suffice. Pytest is a development dependency. Model hook profiling additionally needs torch; hook tests skip without it. /root/miniconda3/envs/snn/bin/python is usable locally.
 
-```bash
-cd article
-latexmk -pdf -interaction=nonstopmode -outdir=build article.tex
-```
+## Conventions
 
-The paper build needs six `article/picture/*.pdf` inputs. Generate them with the plotting scripts or restore them locally before compiling a fresh clone.
+- Preserve unrelated workspace edits and local input/result artifacts. Do not commit unless asked.
+- Output paths must be new or empty. Do not use broad cleanup or make clean.
+- Preserve task identity for delivered-but-unconsumed flits even after endpoint reuse.
+- Each link transfer takes a full NoC cycle. No-contention delivery is Manhattan hops + 2. A transfer completing at K is checked before the next round; logical steps may span physical ticks.
+- Maintain generated=Tx+source, Tx=Rx+network, Rx=consumed+sink. Pending source batches must not materialize arbitrarily many flits.
+- Distinguish synthetic, modeled operator SOP, model profiling and hardware evidence. Do not infer compute from traffic or occupancy.
+- Joint STPS and delayed start are implemented. SchedulingFingerprint uses independent calibration edge means and total SOP[T]. No future replay arrays enter choose_stps. Large-model/hardware validation remains future work.
+- Keep article/ LaTeX files together. Do not alter ignored datasets/weights/results or the SNN schedule alias to article/.
 
-## Maintenance conventions
+- simulation/cluster_engine.py uses one physical clock and independent card_runtime.py networks/barriers. Resources are reserved at placement and released only on actual completion. All policies use row-major-free-v1 mapping.
+- schedule/baselines.py receives resource snapshots and declared offline means; P2C does not read future replay traces or successful throughput.
+- cluster_metrics.py merges all cards including idle Tick rows and emits full/steady balance with numerators/denominators. Cluster report links card detail reports.
+- Run make cluster-validate for all tests and the ten fixed synthetic baseline cases.
+- Cluster metrics include offered and served communication, CV/JFI/LIF/P99-to-mean/max-to-mean, temporal tails, and full 1/4/8-Tick sliding windows. LIF is max/mean; with four cards nearest-rank P99 equals max.
+- Use sliding_window_ms only with explicit physical_tick_ms calibration. Historical STPS artifacts predate hotspot metrics; use make stps-hotspots for same-binary comparisons.
 
-- Keep paper citations and figure paths relative to `article/`; README and docs should link to `article/article.tex` from the repository root.
-- Keep local `data/` CSVs and `.npz` inputs available during experiments. They are ignored by Git along with result figures, runtime logs, Python caches, LaTeX auxiliary files, and W&B logs.
-- Do not run `make clean` as a general repository cleanup: its target removes top-level CSVs and figure files.
-- When changing code, keep CLI arguments, Makefile calls, output paths, and documentation aligned. Place schedulers in `schedule/`, register them through `schedule/base.py`, and test the affected behavior.
-- Preserve unrelated workspace modifications and avoid committing unless requested.
+- schedule/stps.py evaluates all feasible card/offset combinations. Completion mode ranks by (J, pressure, delay, card_id); balance mode applies its J slack gate before projected dual-load balance ranking. Do not silently change objective/parameters using held-out comparison outcomes.
+- CardRuntime reserves at placement, stores requested_start separately, and starts due tasks only at the card round boundary; ongoing tasks continue while another is delayed.
+- make stps-compare freezes independent synthetic calibration/validation/test inputs; make stps-hotspots re-runs the five baselines and balance-objective STPS under one current binary. docs/results/stps_hotspots.md is the retained comparison and reports mixed results without general superiority claims.

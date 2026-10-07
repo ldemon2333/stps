@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "name": "positive",
+  "card": {
+    "mesh_x": 4,
+    "mesh_y": 2,
+    "neurons_per_core": 128,
+    "memory_mb": 16
+  },
+  "noc": {
+    "cycles_per_tick": 40,
+    "router_buffer_depth": 2,
+    "source_buffer_depth": 2,
+    "sink_buffer_depth": 2
+  },
+  "tasks": [
+    {
+      "task_id": "bursty",
+      "workload": "bursty.json",
+      "start_tick": 1,
+      "mapping": [
+        0,
+        7
+      ]
+    },
+    {
+      "task_id": "fan_in",
+      "workload": "fan_in.json",
+      "start_tick": 1,
+      "mapping": [
+        1,
+        3
+      ]
+    },
+    {
+      "task_id": "compute_heavy",
+      "workload": "compute_heavy.json",
+      "start_tick": 1,
+      "mapping": [
+        4,
+        6
+      ]
+    }
+  ]
+}

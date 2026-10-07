@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "units": {
+    "traffic": "flits_per_logical_tick",
+    "compute": "sops_per_logical_tick"
+  },
+  "state_size_mb": 0.6,
+  "source": "synthetic:cluster-demo:light_sparse",
+  "metadata": {
+    "calibration": "known synthetic profile; separate task-level means only",
+    "compute_model": "independent manually specified SOP trace",
+    "description": "four-population sparse directed chain, one burst and local work",
+    "flit_model": "one abstract spike packet is one flit",
+    "provenance": "manually specified stimulus; not measured SNN inference"
+  },
+  "pop_size": [
+    32,
+    32,
+    32,
+    32
+  ],
+  "edge_src": [
+    0,
+    1,
+    2,
+    0,
+    3
+  ],
+  "edge_dst": [
+    1,
+    2,
+    3,
+    3,
+    3
+  ],
+  "edge_expected_flits": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      2.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      2.0
+    ],
+    [
+      8.0,
+      4.0,
+      4.0,
+      2.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "compute_sops": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      80.0,
+      40.0,
+      10.0,
+      10.0
+    ],
+    [
+      0.0,
+      30.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      60.0
+    ],
+    [
+      240.0,
+      180.0,
+      80.0,
+      100.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      70.0,
+      60.0,
+      70.0,
+      50.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

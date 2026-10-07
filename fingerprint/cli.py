@@ -1,82 +1,41 @@
-"""CLI for offline fingerprint extraction (synthetic path).
-
-Examples:
-    python -m fingerprint.cli --synthetic --T 32 --beta 4 --K 2 \
-        --out npz/synthetic_bursty.npz
-
-For real-model extraction use the dedicated adapters:
-    python -m fingerprint.extract_spikformer ...
-    python -m fingerprint.extract_spikingresformer ...
-"""
-from __future__ import annotations
-
+"""Generate an explicitly synthetic workload or convert a same-source TNN2 trace."""
 import argparse
-import sys
+from pathlib import Path
 
-from . import (
-    Fingerprint,
-    load_fingerprint,
-    make_synthetic_fingerprint,
-    save_fingerprint,
-)
+import numpy as np
+
+from .workload import from_edge_tensor, make_sparse_workload, save_workload
 
 
-def parse_args(argv=None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Offline DTDG fingerprint extractor")
-    p.add_argument("--out", required=True, help="Output .npz path")
-    p.add_argument("--T", type=int, default=32, help="DTDG window size")
-    p.add_argument("--synthetic", action="store_true",
-                   help="Generate a synthetic fingerprint (default if no --model)")
-    p.add_argument("--beta", type=float, default=4.0,
-                   help="Synthetic burstiness target (only with --synthetic)")
-    p.add_argument("--K", type=int, default=1,
-                   help="Synthetic active-connected-components target")
-    p.add_argument("--var", type=float, default=0.05,
-                   help="Synthetic centrality-variance target")
-    p.add_argument("--V", type=int, default=16,
-                   help="Synthetic population count")
-    p.add_argument("--neuron-count", type=int, default=512)
-    p.add_argument("--state-size-mb", type=float, default=12.0)
-    p.add_argument("--complexity-ratio", type=float, default=1.0)
-    p.add_argument("--e-mean", type=float, default=1.0,
-                   help="Rescale E so E.mean() == this value (spikes/tick)")
-    p.add_argument("--seed", type=int, default=None)
-    return p.parse_args(argv)
-
-
-def main(argv=None) -> int:
-    args = parse_args(argv)
-
-    fp = make_synthetic_fingerprint(
-        beta_target=args.beta,
-        K=args.K,
-        var_target=args.var,
-        T=args.T,
-        V=args.V,
-        neuron_count=args.neuron_count,
-        state_size_mb=args.state_size_mb,
-        complexity_ratio=args.complexity_ratio,
-        e_mean=args.e_mean,
-        seed=args.seed,
-        meta={"source": "synthetic", "beta_target": str(args.beta),
-              "K": str(args.K), "e_mean": str(args.e_mean)},
-    )
-
-    save_fingerprint(args.out, fp)
-    loaded = load_fingerprint(args.out)
-    print(_summary(loaded))
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    synthetic = sub.add_parser("synthetic", help="sparse independent SOP/traffic test stimulus")
+    synthetic.add_argument("--out", type=Path, required=True)
+    synthetic.add_argument("--seed", type=int, default=0)
+    synthetic.add_argument("--ticks", type=int, default=8)
+    synthetic.add_argument("--populations", type=int, default=3)
+    convert = sub.add_parser("from-tensor", help="convert explicit traffic+compute, not E-only")
+    convert.add_argument("--tensor", type=Path, required=True, help=".npy T x N x N x 2")
+    convert.add_argument("--pop-size", type=int, nargs="+", required=True)
+    convert.add_argument("--state-size-mb", type=float, required=True)
+    convert.add_argument("--source", required=True, help="model/checkpoint/sample provenance")
+    convert.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "synthetic":
+            workload = make_sparse_workload(seed=args.seed, T=args.ticks, populations=args.populations)
+        else:
+            workload = from_edge_tensor(np.load(args.tensor, allow_pickle=False), args.pop_size,
+                                        args.state_size_mb, args.source,
+                                        {"tensor_path": str(args.tensor)})
+        save_workload(args.out, workload)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    print(f"saved {args.out}: T={workload.T}, MicroPopulations={workload.population_count}, "
+          f"flits={workload.totals['quantized_flits']}, SOP={workload.totals['compute_sops']}")
     return 0
 
 
-def _summary(fp: Fingerprint) -> str:
-    return (
-        f"Fingerprint(T={fp.T}, V'={fp.max_centrality.shape[0]}, "
-        f"beta={fp.global_burstiness:.3f}, K_mean={fp.mean_components:.2f}, "
-        f"E_max={float(fp.traffic_sequence.max()):.2f}, "
-        f"E_mean={float(fp.traffic_sequence.mean()):.2f}, "
-        f"meta={fp.meta})"
-    )
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

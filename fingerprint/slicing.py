@@ -1,13 +1,13 @@
-"""Hardware-aware micro-population slicing (docs/fingerprint.md §2.3).
+"""Hardware-aware MicroPopulation slicing for explicit offline graphs.
 
 Slicing target is a LIF *node* v_i defined by its output tensor shape
 (NOT the upstream Conv2d/Linear operator). This module decomposes a
 node into a list of MicroPopulations satisfying |v_i| ≤ N_core_cap.
 
 Three node kinds:
-    "vec"          — 1D output (C,)               §2.3.1
-    "fmap"         — 4D output (C, H, W)          §2.3.2  (may emit halo edges)
-    "token_embed"  — 2D output (N_tok, C)         §2.3.3
+    "vec"          — 1D output (C,)
+    "fmap"         — 4D output (C, H, W)            (may emit halo edges)
+    "token_embed"  — 2D output (N_tok, C)
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class MicroPopulation:
         meta: per-shard metadata (channel range, spatial range, head id, ...).
         halo_neighbors: list of (sibling shard_id, flits_per_step) tuples for
             halo edges that must be registered later. Only fmap kind populates
-            this when single-channel feature map exceeds N_core_cap (§2.3.2).
+            this when single-channel feature map exceeds N_core_cap.
     """
 
     node_id: str
@@ -97,7 +97,7 @@ def _split_fmap(
     pops: List[MicroPopulation] = []
 
     if S <= N_core_cap:
-        # §2.3.2 (i): channel-only split; one core holds Cp full feature maps.
+        # Channel split: channel-only split; one core holds Cp full feature maps.
         Cp = max(1, N_core_cap // S)
         n_shards = math.ceil(C / Cp)
         for p in range(n_shards):
@@ -113,7 +113,7 @@ def _split_fmap(
             )
         return pops
 
-    # §2.3.2 (ii): single feature map exceeds core cap → channel+row split.
+    # Row split: single feature map exceeds core cap → channel+row split.
     R = max(1, N_core_cap // W)  # rows per strip
     halo_flits = (K - 1) * W  # per-step halo flits, Cin folded later by edge_builder
     shard_id = 0
@@ -144,7 +144,7 @@ def _split_token_embed(
     node_id: str, shape_meta: tuple, N_core_cap: int, head_dim: int,
 ) -> List[MicroPopulation]:
     N_tok, C = shape_meta
-    # Per §2.3.3: same head's d_head channels must not split across cores.
+    # By convention: same head's d_head channels must not split across cores.
     raw_cap = max(1, N_core_cap // max(N_tok, 1))
     Cp = max(head_dim, (raw_cap // head_dim) * head_dim)
     n_shards = math.ceil(C / Cp)

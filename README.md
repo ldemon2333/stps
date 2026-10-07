@@ -1,69 +1,81 @@
-# STPS 论文实验仿真代码
+# 单卡多任务 SNN NoC 仿真器
 
-本仓库是论文 [STPS: Spatio-Temporal Proactive Scheduling for Spiking Neural Networks on Compute-in-Memory Clusters](article/article.tex) 的实验代码。核心是离散时间仿真器：从 SNN 工作负载指纹生成任务，在多张 CIM 卡上比较 STPS、RR、BestFit、DRF、P2C 的放置与相位偏移策略，记录负载均衡、吞吐量和片上网络（NoC）拥塞指标。这里模拟调度行为，不运行真实 CIM 硬件。
+当前实现 [RFC 第一阶段](docs/rfc.md)：在单卡二维 mesh 上运行显式指定的多个 SNN Task，输入保存逐 MicroPopulation 的 SOP 与有向边逐 Tick 流量。核映射和启动时刻由场景提供。
 
-论文以 [article/article.tex](article/article.tex) 为源文件。实验 CSV、指纹文件和生成图只保存在本地，不纳入 Git。论文描述的实验规模与快速运行示例不同，具体参数以相应实验脚本和文档为准。
+每个物理 Tick 固定 K 个 NoC cycle。通信未全部到达目的 NI 时保留队列、跨 Tick 继续传输；卡上任务停在当前逻辑步，全部 Rx 后下一物理 Tick 才共同推进。SOP 与请求只生成一次，拥塞使逻辑步与任务实际运行时间变长。目的 NI 消费与 Rx 分开。
 
-## 目录
+## 运行与观察
 
-| 路径 | 内容 |
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q tests/
+python script/validate_single_card.py --output-root data/phase1
+```
+
+最后一条命令创建带时间戳的目录，运行正常、跨 Tick、小缓冲、预设错峰和上限截断场景。打开输出目录的 index.html，即可看每个 Task 的 SOP/发包/收包曲线、MicroPopulation 热图与拥塞；workload.svg 可独立分享。
+
+当前结果见 [跨 Tick 验收记录](docs/results/elastic.md)。配置默认值与全部参数见 [hyperparam.md](docs/hyperparam.md)，所有计数、任务时间与减速比定义见 [metrics.md](docs/metrics.md)。
+
+```bash
+python main.py --scenario examples/single_card/positive.json --output-dir data/my_run --trace
+python main.py --scenario examples/single_card/carry_over.json --output-dir data/my_carry_over --trace
+```
+
+输出目录必须不存在或为空。成功退出码为 0；max_ticks 截断为 2；非法输入在生成结果前拒绝。--trace 写逐 cycle 转移事件，默认写聚合记录。单卡入口固定mapping；多卡入口提供在线策略。无后台服务或外部日志上传。
+
+## 实现结构
+
+| 路径 | 职责 |
 | --- | --- |
-| [article/](article/) | 论文 LaTeX、`tables/` 表格和实验记录；`picture/` 为本地图文件 |
-| [main.py](main.py)、[Makefile](Makefile) | 单次仿真入口和常用命令 |
-| [fingerprint/](fingerprint/) | SNN 轨迹提取、合成与存取指纹 |
-| [schedule/](schedule/) | STPS、消融版本和对照调度器 |
-| [simulation/](simulation/)、[util/](util/) | 仿真循环、卡片与任务模型、指标 |
-| [script/](script/) | Q0/Q1/Q2、拥塞、开销、鲁棒性、扩展性实验与绘图 |
-| [npz/](npz/) | 本地 `.npz` 指纹输出；格式见 [npz/README.md](npz/README.md) |
-| `data/`、`figures/`、`log/` | 本地 CSV、图表与运行日志，均被 Git 忽略 |
-| [docs/](docs/) | 方法、指标和各组实验的补充说明 |
-| [tests/](tests/) | 仿真器与指纹流水线测试 |
-| `extras/`、`archive/` | 本地资料，Git 忽略 |
+| [fingerprint/workload.py](fingerprint/workload.py) | 显式有向边 Traffic 与独立 SOP、JSON/NPZ、量化 |
+| [fingerprint/dtdg.py](fingerprint/dtdg.py)、[extractor.py](fingerprint/extractor.py) | 指定模型模块的前向采样与显式拓扑转换 |
+| [simulation/scenario.py](simulation/scenario.py) | 场景、固定核位与单任务容量校验 |
+| [simulation/noc.py](simulation/noc.py) | XY、有限 FIFO、轮转仲裁、反压和原子 cycle |
+| [simulation/engine.py](simulation/engine.py) | 物理 Tick、弹性逻辑步、实际资源准入、全卡屏障与守恒 |
+| [util/metrics.py](util/metrics.py)、[simulation/report.py](simulation/report.py) | CSV、计数对账、HTML/SVG |
+| [examples/single_card/](examples/single_card/) | 三任务稀疏时变输入和固定场景 |
 
-旧路径 `SNN schedule/` 是指向 `article/` 的兼容符号链接。现有部分绘图脚本仍使用旧路径写入 `picture/`，因此运行这些脚本时会直接更新 `article/picture/`。
+详细字段、时序与验收见 [架构文档](docs/arch.md)、[实验说明](docs/experiment.md)；联合 STPS 实现与结果见 [算法文档](docs/algo.md)。旧调度器、每卡总量 FIFO、E-only 指纹与旧 Q0/Q1/Q2 执行脚本已移除；[当前结果索引](docs/results/README.md)只保留新模拟器可复核的三组结果。
 
-## 环境与快速运行
+后续算法对照的定义、命名、共用准入和相位实验细节见 [基线设计](docs/baselines.md)。RR、WorstFit、DRU、BestFit、P2C-Mean现已实现；联合STPS与延迟启动已实现，使用独立校准profile；没有空间/时间拆分版。
 
-项目使用 Python。仓库现有环境可用 `/root/miniconda3/envs/snn/bin/python`；在其他机器上可自行创建环境。`requirements.txt` 包含模型指纹提取及其他实验所需的扩展依赖，基本仿真主要使用 NumPy。
+## 输入与验证边界
+
+示例的 SOP 与 flit 是明确标注的合成数值，展示静默、短突发、计算高而通信低及共享链路争用，不声称执行真实 SNN 推理或 CIM 芯片。SOP 是每逻辑步的工作量记账，未模拟计算服务时间；NoC cycle 尚未做硅片校准。
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-make PYTHON=python fingerprints
-python main.py --list-schedulers
-python main.py --scheduler stps --cards 4 --tasks 128 --steps 128 --seed 21 --arrival-mode bursty --fingerprint-dir npz --bw-max 5e6 --d-max 16 --horizon 64
+python -m fingerprint.cli synthetic --out npz/sparse.json --seed 17
+python -m fingerprint.cli from-tensor --tensor trace.npy --pop-size 64 64 --state-size-mb 1 --source model/checkpoint/sample --out npz/graph.npz
 ```
 
-命令在 `data/` 写 CSV，在 `log/` 写运行日志。`main.py` 的默认值与 Makefile 的默认值不同；复现实验时应显式传参，或直接使用对应脚本。
+trace.npy 必须是 (T,N,N,2)，分别为同源边流量期望和目标 SOP。E-only NPZ 会被拒绝。也可用 collect_spike_traces 与 workload_from_spike_traces 接入明确的模型模块、图边和操作倍率；不会按模块注册顺序猜测真实连接。大型模型/真实数据集的端到端采集尚未验证。
 
-## 论文实验入口
+可选真实小型 LIF 前向采样入口为 script/profile_tiny_snn.py（需要 torch 与 SpikingJelly）。它以受控合成电流运行未训练模型，已验证采样、同源工作负载导出和单卡重放；输入不是实测数据集，SOP 仅覆盖显式算子范围。
 
-| 实验 | 入口 | 主要输出 |
-| --- | --- | --- |
-| 端到端对比与 16 卡扩展（Q0） | `python script/q0_run.py main`、`python script/q0_run.py scale16` | `data/q0/`、`figures/q0/` |
-| 空间负载均衡（Q1） | `python script/q1_run.py main` | `data/q1/`、`figures/q1/` |
-| 相位偏移与消融（Q2） | `python script/q2_run.py main4` | `data/q2/`、`figures/q2/` |
-| 论文表格核对 | `python script/gen_tables.py` | `article/experiment_regen.md` |
-| 其他实验 | `script/exp1_motivation.py` 至 `script/exp4_scalability.py` | `data/`、`article/picture/` |
+论文源码在 [article/article.tex](article/article.tex)。旧表格使用旧网络模型，本轮没有改写其数值；后续算法实验须重新生成。
 
-完整实验可能运行较久并覆盖同名结果文件。运行前可先看 [article/experiment.md](article/experiment.md)、[article/experiment_regen.md](article/experiment_regen.md) 及 [docs/](docs/) 对参数、数据来源和指标口径的记录。这些记录引用的 CSV 和图未随仓库发布；论文使用的真实模型指纹也需另行准备。
 
-常用 Make 目标：`make list-schedulers`、`make fingerprints`、`make stps`、`make compare-stps`、`make q0`、`make q1`。Q2 请使用上表的 `python script/q2_run.py main4`；当前 Makefile 的 `q2-scale16` 传入脚本未支持的 `scale16` 参数。Makefile 默认使用 `/root/miniconda3/envs/snn/bin/python`，可用 `PYTHON=python make stps` 覆盖。`make clean` 会删除 `data/` 顶层 CSV 和 `figures/` 顶层文件，使用前先检查其中的数据。
-
-## 论文与验证
-
-在 `article/` 内编译论文，保持 `picture/...` 与 `references.bib` 的相对路径。论文使用的六张图已被 Git 忽略；首次克隆后须先用相应绘图脚本生成或从本地备份恢复 `article/picture/`，才能完整编译：
+## 四卡基线模拟
 
 ```bash
-cd article
-latexmk -pdf -interaction=nonstopmode -outdir=build article.tex
+make cluster-validate
+python main.py --cluster-scenario examples/cluster/poisson.json --policy RR --output-dir data/my_cluster_run --trace
 ```
 
-运行代码测试：
+统一4张4×4卡、row-major空核映射，分别比较Poisson和bursty到达下的五种策略。每组24个完整任务、8逻辑步，SOP/通信输入人工构造。程序在线选卡、放置预留，卡上逻辑步独立受各自Rx屏障控制；不会因某卡拥塞停止其它卡。
+
+输出顶层report.html、任务时序、资源/决策CSV、全程与固定稳态窗计算/通信均衡，并链接每卡详细报告。参数、预测均值与到达过程见[示例说明](examples/cluster/README.md)，本次结果见[四卡验收](docs/results/cluster_baselines.md)。
+
+
+## 联合STPS热点对比
 
 ```bash
-python -m pytest tests/
+make stps-compare
+make stps-hotspots
 ```
 
-设计到代码的对应关系见 [docs/stps.md](docs/stps.md) 和 [docs/fingerprint.md](docs/fingerprint.md)；代理与维护约定见 [CLAUDE.md](CLAUDE.md)。
+第一条命令生成独立校准/验证/测试输入，第二条在冻结的20个测试场景上用同一当前二进制重跑五基线与STPS，共120组。固定4卡×4×4、Poisson/bursty、24/48任务、5种子；预测指纹只保留逐步计算总量与稀疏边流量，profile与真实重放输入分开。
+
+热点/straggler评价输出计算、offered通信、served通信的CV/JFI/LIF、P99-to-Mean、Max-to-Mean，以及1/4/8 Tick滑动窗口时间序列。保留的热点产物使用`objective=balance,balance_slack=0,adaptive_ledger=True`；当前源码默认关闭adaptive账本，复现该产物必须显式启用。
+
+当前热点重跑见[报告](data/stps_hotspots/20261007T100702_647954Z/index.html)和[分析](docs/results/stps_hotspots.md)。120次运行全部完成且守恒；结果随窗口长度变化，部分4/8 Tick场景改善，另一些退化。逐Tick4卡P99/LIF常饱和为4，计算均衡四组均未胜出，因此没有形成全面优势。

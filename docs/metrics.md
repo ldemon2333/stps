@@ -1,379 +1,301 @@
-# Metrics 计算方式
+# 模拟器全部指标与统计口径
+
+对应 [util/metrics.py](../util/metrics.py)、[engine.py](../simulation/engine.py)、[cluster_metrics.py](../simulation/cluster_metrics.py)，运行模式为跨 Tick 排队与全卡 Rx 屏障。超参数见 [hyperparam.md](hyperparam.md)。单卡输出 schema_version=2，多卡顶层为3；联合STPS和五种基线共用相同测量口径。
+
+## 1. 时间、身份与输出表
+
+physical_tick 从 1 开始，每个 Tick 固定 K cycle；cycle 从 0 开始，转移在 c+1 提交。logical_tick 是每任务从 0 开始的逻辑步进度，不能用 physical_tick-start_tick 推导；通信延长时同一逻辑步跨多个物理 Tick。population_id 是工作负载中的 MicroPopulation 索引，core_id 为映射后的物理核。每个包及队列库存保留 task_id/logical_tick/edge_id/src_core/dst_core/generated_cycle。
+
+| 文件 | 粒度与行规则 |
+| --- | --- |
+| core_tick.csv | task_id、physical_tick、logical_tick、population_id、core_id；任一测量非零才写，缺行=零。原逻辑步库存/延后消费仍归原步 |
+| task_tick.csv | task_id、physical_tick、logical_tick；每个正在执行/等待屏障的任务保留全零行；旧 sink 事件可产生其它逻辑步的行 |
+| card_tick.csv | 每物理 Tick 一行；测量从 task_tick 求和，包含整个观察窗口的空闲 Tick |
+| step_timing.csv | 每任务每已开始逻辑步一行；全卡屏障释放时完成，截断时写当前未完成步 |
+| task_summary.csv | 每个任务一行，包括尚未启动者；累计事件、最终库存、时延分位与任务时间 |
+| queue_stats.csv | 每队列每物理 Tick；峰值为0的行省略；保留容量和积分分母 |
+| link_stats.csv | 每有转发的有向链路每物理 Tick |
+| outstanding.csv | 最终按身份和位置分组的真实库存，含未到达和已到达未消费 |
+| events.csv | --trace 才写；逐生成/入队/转移/受阻事件，数量 count，可复算局部诊断 |
+| manifest.json | 全卡累计/派生/时序摘要、输入来源/参数/hash/实际任务时间与库存峰值 |
+
+core→task→card 测量逐字段求和一致。生命周期字段只在相应级别定义，不作逐核相加。合法跨 Tick Rx 不会改变原 logical_tick；因此同物理 Tick 的一任务可以同时含当前步与旧 sink 消费行。
+
+## 2. 通信、计算与库存：MEASURES 全部字段
+
+| 字段 | 单位 | 计数点/归属 |
+| --- | --- | --- |
+| compute_sops | SOP | 逻辑步开始一次记账；归执行 MicroPopulation 的核；等待 Tick 不重复 |
+| expected_tx | flit | 该步已量化的跨核计划需求，归源核；不是原浮点期望 |
+| generated_tx | flit | 该步新生成跨核请求，归源核；当前等于 expected_tx |
+| expected_rx | flit | 同一跨核计划需求的目的视图，归目的核 |
+| tx_injected | flit | 源 NI→本地 Router 成功转移；归源核 |
+| rx_ejected | flit | 目标 Router→目的 NI 成功交付；归目的核，简称 Rx |
+| rx_consumed | flit | 目的 NI 释放/消费；归原任务目的核，不重复计 Rx |
+| local_flits | flit | 自环/同核流量，绕过 NoC，不计入生成/Tx/Rx守恒 |
+| tx_stall_cycles | cycle | 源 NI 有队头但本地 Router Local 输入满；该源本 cycle 加1 |
+| rx_blocked_cycles | cycle | 目标 NI 满、目标 Router 有接收请求；每目标每 cycle 加1，归轮转选中的队头任务 |
+| router_wait_flit_cycles | flit-cycle | 每个未转发的旧 Router 输入队头每 cycle 加1；归该包源核；不包括所有队尾包等待 |
+| source_wait_cycles_sum | flit-cycle | 对已注入包累计 Tx提交cycle-generated_cycle；包含最低1 cycle注入服务 |
+| rx_latency_cycles_sum | flit-cycle | 对已Rx包累计 Rx提交cycle-generated_cycle |
+| rx_excess_latency_cycles_sum | flit-cycle | 对已Rx包累计实际延迟减(h+2)，h为映射后的曼哈顿hop数 |
+| pending_tx | flit，末端库存 | source_pending+source_ni，归源核 |
+| in_network | flit，末端库存 | Router 输入FIFO中的在网包，归原源核；当前位置见 outstanding |
+| pending_rx | flit，末端库存 | source_pending+source_ni+router，同批未到达包的目的视图，归目的核 |
+| sink_unconsumed | flit，末端库存 | 已Rx未消费的目的NI库存，归原目的核 |
+
+前三类期望/生成量只在开始步骤记。量化前的 expected_flits 及量化后 quantized_flits 在 manifest.tasks[].input_totals；差值不算丢包。四个库存字段在 task_summary/manifest.totals 为最终值，不能跨Tick累加成吞吐；pending_rx 与 pending_tx+in_network 重复表示同一批包，不能把四列全相加。
+
+每任务每Tick末检查：
+
+$$
+G=Tx+P+S,\quad Tx=Rx+N,\quad Rx=Consumed+R.
+$$
+
+P/S/N/R 分别是逻辑待发/源NI/Router/目的NI库存。每个包只有一个实际位置。链路转移完成后位于下游Router，在整数边界无独立链路库存。
+
+## 3. 屏障与逐 Tick 生命周期字段
+
+| 表/字段 | 含义 |
+| --- | --- |
+| core/task/card.barrier_ready | Tick末全卡未到达量为0；False是继续等待，不是运行错误 |
+| task.step_started | 本任务当前逻辑步在此物理Tick开始；旧逻辑步消费行留空 |
+| task.step_elapsed_ticks | 此步已占用物理Tick数，含本Tick |
+| task.waiting_for_communication | 此任务自己的未到达量>0 |
+| task.waiting_for_card_barrier | 自己包已Rx，但其它任务未到达，阻止本任务推进 |
+| card.round_started | 当前Tick开始了新全卡轮次 |
+| card.round_elapsed_ticks | 此轮从起点到本Tick持续多久；无活跃轮次为0 |
+| card.communication_extension_tick | 当前Tick是已开始轮次的第2或以后Tick |
+| card.active_tasks | 本Tick参与当前轮次的任务数，包含在本Tick末完成者 |
+| card.waiting_tasks | 固定单卡为最早start_tick已到但未实际启动数；多卡子报告为已放置未启动数，包含主动延迟和边界等待 |
+| card.completed_tasks | 到本Tick末累计完成任务数 |
+
+全卡一轮的参与任务可能有不同logical_tick。只要一个任务尚有未到达包，所有参与者都留在当前步；不在同一Tick释放屏障后立刻发下一步。每个逻辑步最短1物理Tick。
+
+## 4. step_timing：逐步执行时间
+
+| 字段 | 说明 |
+| --- | --- |
+| step_start_tick / step_end_tick | 此逻辑步起始Tick、完成Tick；截断步的end为最后观察Tick |
+| logical_step_duration_ticks | end-start+1；包含最低一个Tick |
+| communication_extension_ticks | duration-1；全卡屏障额外占用，包含自己的通信和其它任务造成的等待 |
+| last_rx_cycle | 此任务此步最后Rx的绝对cycle；无跨核包/尚未Rx时为空 |
+| rx_complete | 该任务本步全部跨核包已经Rx；可以True但step_completed=False（其它任务仍未到达） |
+| step_completed | 全卡屏障已释放；False表示截断的部分观察 |
+
+完成步的时间例：K=6，最后Rx在相对起点第13cycle，全卡最早在第3个物理Tick末释放，duration=3、extension=2。无跨核包也可能随同卡其它任务跨3Tick。
+
+可由last_rx_cycle计算自己的包送达时间（单位cycle）：
+
+$$
+D^{last}_{\tau,s}=last\_rx\_cycle-(step\_start\_tick-1)K.
+$$
+
+它与全卡屏障释放时刻不同；没有包时不人为设一个Rx事件。
+
+## 5. task_summary/manifest.tasks：任务时间与进度
+
+本节列固定单卡入口的时序字段；在线多卡顶层以arrival为起点，并拆分主动等待，见第10节。各卡子目录保持单卡字段格式，其中start_tick为多卡调度器给出的requested_start_tick。
+
+| 字段 | 含义 |
+| --- | --- |
+| status | completed / unfinished（已启动未完成） / not_started |
+| start_tick | 场景规定最早启动Tick |
+| planned_end_tick | start_tick+T-1；只作理想单步一Tick参考，不用于释放资源 |
+| actual_start_tick / completion_tick | 实际启动/全卡末步屏障完成的Tick；未发生时为空/null |
+| logical_ticks | 输入T，总逻辑步数 |
+| steps_started / steps_completed | 已生成过的步数 / 已越过屏障的步数；截断可差1 |
+| task_start_wait_ticks | 已启动：actual_start-start；未启动：max(0,last_observed-start+1)，仅已观察等待 |
+| observed_execution_ticks | 已启动后观察到的执行Tick数；未启动为0 |
+| task_execution_ticks | 完成时completion-actual_start+1；未完成为空，不以0伪造快速完成 |
+| task_end_to_end_ticks | 固定单卡完成时completion-start_tick+1；多卡子目录从requested_start计，完整arrival口径见顶层task_summary |
+| communication_extension_ticks | 任务参与的延长物理Tick累计；同卡等待也计入 |
+| slowdown | 完成时execution/T；未完成为空 |
+
+完成任务有 execution=T+communication_extension，end_to_end=start_wait+execution。仅通信时间变化，SOP不模拟服务周期；即使无竞争，路径长、同源串行发包或K过小也会延长，不能把全部extension都称为多任务冲突。
+
+## 6. 延迟、等待和派生比率
+
+| 字段 | 分子/分母与边界 |
+| --- | --- |
+| mean_source_wait_cycles | source_wait_cycles_sum / tx_injected，0分母取0 |
+| mean_rx_latency_cycles | rx_latency_cycles_sum / rx_ejected，0分母取0 |
+| mean_rx_excess_latency_cycles | rx_excess_latency_cycles_sum / rx_ejected，0分母取0 |
+| router_wait_per_generated_flit | router_wait_flit_cycles / generated_tx，0分母取0；单位cycle/flit，非队列中所有包的平均等待 |
+| rx_latency_p95_cycles | 已Rx包延迟的nearest-rank精确95分位；无Rx取0，仅task_summary输出 |
+| rx_excess_latency_p95_cycles | 已Rx包(延迟-h-2)的同口径p95；无Rx取0，仅task_summary输出 |
 
-> 关联代码：[util/metrics.py](../util/metrics.py)、[simulation/engine.py](../simulation/engine.py)。
-> 关联文档：[Q0_result.md](Q0_result.md)、[traffic_result.md](traffic_result.md)、[traffic_optim.md](traffic_optim.md)。
->
-> 本文档逐项给出 Q0 / traffic 实验里出现的 metric 的精确计算口径，回答 “这个数到底是怎么算出来的” —— 不是物理解释，是公式 + 代码定位。
+manifest.derived 为全卡前四个比率。全部原始分子/分母均保留在累计列中。全卡p95不能平均任务p95；需要合并直方图或events重算。截断运行只含已成功注入/接收包，必须同时报告未完成量和状态，防止幸存者偏差。额外延迟剔除基本路径成本，但仍包含批量发包串行等待；要隔离多任务干扰，应比较相同映射的单任务基准。
 
----
+## 7. 队列、链路、事件与最终库存
 
-## 0. 通用约定
+queue_stats 的 kind 为 source_pending/source_ni/router/sink_ni；router/port 标位置，边界Router也分配五个输入数组，未用端口始终为0。capacity 是对应队列容量，source_pending为空表示无界。
 
-- **快照粒度**：每个 simulation tick 产生 1 个 `LoadSnapshot` ([util/metrics.py:36](../util/metrics.py#L36))。所有 *card-level* metric 都是先在快照内对 N 张卡聚合成 1 个标量，再沿 tick 维度做平均。
-- **Steady-state 窗口**：当快照数 > 128 时，丢弃首 64 + 末 64 个 tick，只用中间窗口聚合（[util/metrics.py:213](../util/metrics.py#L213) `_steady_window`）。Q0 / traffic 默认 512 ticks → 实际窗口 384 ticks。≤128 时不裁剪。
-- **`card_load`（per-card per-tick）**：等于该 tick 这张卡 *实际服务* 的总字节数 `Σ_tasks_on_card served`（[engine.py:353](../simulation/engine.py#L353) `_card_epoch_load`），即被 `bw_cap` 钳制后的值，**不包括** 入 `pending_traffic` 的 leftover。
-- **`card_demand`（per-card per-tick）**：该 tick 这张卡上 *请求* 的总字节数（含队列残量 + 新 quantum），= `Σ_tasks demand`，未受 `bw_cap` 钳制。
-- **`card_backlog`（per-card per-tick）**：该 tick 结束后这张卡上所有任务 `pending_traffic` 之和。
+| 队列字段 | 口径 |
+| --- | --- |
+| occupancy_sum | K个cycle起点占用求和，flit-cycle |
+| samples | 积分分母，固定K；未输出的全零队列也有K个逻辑样本 |
+| occupancy_peak | 起点及最后提交边界的最大占用，flit |
+| full_cycles | K个起点中occupancy==capacity的次数；无界待发区为0 |
 
----
+单队列平均占用=sum/samples；满队列比率=full_cycles/samples。全网同类平均需要将省略的零队列补入分母：源/宿/待发为核数×K×Tick数，Router为5×核数×K×Tick数。最后边界峰值不增加积分或full_cycles。峰值大不等于停滞，只能说明积压。
 
-## 1. 空间均衡类（卡间累计负载离散度）
+link_stats 的 router/port/next_router 标有向链路；flits 是成功转发量，busy_cycles 是转发占用的cycle数。当前一次传一flit，两者相等；利用率=busy_cycles/K，省略链路行视为0。
 
-这些 metric 全部用 `card_load`（served），在每个快照内对 N 张卡算一次，再沿 tick 做平均。**衡量的是“卡之间总活儿分得平不平”，与时间维错峰无关。**
+events.kind 包含 generate/generate_local/source_enqueue/tx/link/rx/consume/tx_stall/rx_blocked/router_wait。count为数量，wait_cycles只对tx/rx定义；input_port/requested_output/reason定位Router队头等待，reason为arbitration或downstream_full。generate和初次入源NI时间为当前开始边界，转移/补队为结束边界。
 
-### 1.1 `card_cv` — Coefficient of Variation
+outstanding.kind 使用库存位置，count为同身份位置数量；delivery_pending=True表示未Rx，sink_ni为False。空文件（只有表头）表示所有库存为0，不保证所有任务已完成，例如零流量任务截断仍可能unfinished。
 
-```text
-per-tick:  cv_t = std(L_{i,t}) / mean(L_{i,t})         # L_{i,t} = card i 在 tick t 的 served
-report:    card_cv = mean_{t ∈ steady} cv_t
-```
+## 8. manifest 全卡运行、资源和规模指标
 
-- 代码：[util/metrics.py:64-73](../util/metrics.py#L64-L73) (`LoadSnapshot.cv`) → [util/metrics.py:220](../util/metrics.py#L220) (`avg_card_cv`)
-- mean ≤ 0 时该 tick 返回 0；卡数 < 2 时返回 0。
-- **越小越均衡**。
+| 路径/字段 | 含义 |
+| --- | --- |
+| status / valid | completed/True 或 max_ticks/False；跨Tick拥塞本身不算失败 |
+| ticks_executed / cycles_executed | 实际观察物理Tick数 / Tick数×K |
+| timing.rounds_started / rounds_completed | 有活跃任务的全卡轮次开始/屏障完成数；不是任务步数总和 |
+| timing.barrier_blocked_ticks | Tick末有未Rx包的Tick数，包含未完成轮次的首Tick |
+| timing.communication_extension_ticks | 实际执行过的全卡延长Tick数；未完成轮次首Tick不算extension |
+| timing.tasks_completed / tasks_total | 任务完成分子/总任务数；完成率可复算 |
+| timing.task_throughput_per_tick | completed/ticks_executed，task/物理Tick，含启动前空闲与等待 |
+| peak_inventory_flits.* | 每cycle边界的全卡source_pending/source_ni/router/sink_ni及undelivered峰值；undelivered=前三类之和的峰值，不是各类峰值相加 |
+| elapsed_seconds / cpu_seconds | 场景加载和初始化之后到manifest写出之前的墙钟/进程CPU秒；含CSV与step/task汇总，未含输入加载或HTML绘图 |
+| tasks[].input_totals | 原浮点期望flit、量化flit（含自环）与SOP；未开始步仍在输入总量中 |
+| tasks[].active_edges | 量化后任一步非零边数，包括活跃自环；不是静态全部连接边数 |
+| config/max_ticks/units/source/metadata/hash/mapping | 参数、观测边界、来源、输入校验和与完整固定映射，用于复现，不是性能指标 |
+
+验证脚本 comparison.csv 另含 case、K/缓冲、报告路径以及python_peak_traced_bytes/output_bytes/peak_in_network_flits/peak_undelivered_flits。tracemalloc包住加载至报告，内存为Python分配峰值（非RSS）；进程计时受其开销影响。output_bytes为该场景全部产物大小。可选LIF的scale.json范围仅模型采集后的重放/报告。
+
+## 9. 算法比较建议与当前边界
 
-### 1.2 `card_jfi` — Jain's Fairness Index
+主比较同时给任务执行/端到端时间、slowdown、通信extension、包平均/p95、Router等待及完成率。固定工作负载、请求到达、卡数、K、缓冲和mapping规则；相位延迟可能降低包等待却增加总完成时间，两者都应报告。max_ticks截断不能与完整运行直接比累计等待，不能用少发包得到虚假均衡。
 
-```text
-per-tick:  jfi_t = (Σ L_{i,t})² / (N · Σ L_{i,t}²)     # N = 卡数
-report:    card_jfi = mean_{t ∈ steady} jfi_t
-```
+多卡基线与STPS输出CV/JFI/LIF、P99-to-Mean、Max-to-Mean、预先固定稳态窗口和滑动窗口，见第10节。单卡固定场景只保留完整时间序列，不输出跨卡均衡。STPS预测和真实网络统计见第11节，当前同二进制比较见 [stps_hotspots.md](results/stps_hotspots.md)。
 
-- 代码：[util/metrics.py:75-86](../util/metrics.py#L75-L86) → [util/metrics.py:227](../util/metrics.py#L227)
-- 范围 (0, 1]，**越大越均衡**；全部为 0 时返回 1.0。
+## 10. 多卡基线与 STPS 输出、生命周期
+
+多卡manifest版本3，各卡子目录cards/card_i保持单卡版本2明细。顶层CSV合并前置card_id，core/Router编号都是卡内局部地址；不能在不带card_id时按core_id混合不同卡。所有卡每Tick均采样直到集群结束，空卡与完成后空闲卡也有card_tick行。计算/通信计数含义与单卡一致。
+
+| 任务字段 | 完成/已发生事件口径 | 尚未发生时 |
+| --- | --- | --- |
+| arrival_tick | 外生到达，六策略共享 | 始终保留输入值 |
+| placement_tick | 选卡、提交mapping、立即预留核心和内存 | null |
+| phase_offset_ticks | 请求偏移d；五基线为0，STPS为选择结果 | 尚未放置为0 |
+| requested_start_tick | placement_tick+d | 尚未放置为null |
+| actual_start_tick | requested之后的首个可加入卡轮次起点 | null |
+| resource_wait_ticks | placement-arrival | 已到达未放置取max(0,最后观察Tick-arrival+1)；拒绝为0 |
+| phase_wait_ticks | 已观察的主动等待；正常完成等于d | 已放置时min(d,最后观察Tick-placement+1)，未放置为0 |
+| boundary_wait_ticks | actual_start-requested_start | 已放置未启动取max(0,最后观察Tick-requested_start+1) |
+| task_start_wait_ticks | actual_start-arrival | 已到达且未启动取已观察等待；拒绝为0 |
+| task_execution_ticks | completion-actual_start+1 | 未完成为null |
+| task_end_to_end_ticks | completion-arrival+1 | 未完成为null |
 
-### 1.3 `card_lif` — Load Imbalance Factor
+主动等待发生在资源已预留之后，不包含资源队列等待。启动达到requested门槛仍可能被卡内旧轮次阻塞，产生独立的boundary等待。完成任务满足：
 
-```text
-per-tick:  lif_t = max_i L_{i,t} / mean_i L_{i,t}
-report:    card_lif = mean over { t ∈ steady : lif_t > 0 }
-```
+$$
+T_{e2e}=W_{resource}+W_{phase}+W_{boundary}+T_{execution},\qquad
+T_{execution}=T+communication\_extension\_ticks.
+$$
 
-- 代码：[util/metrics.py:88-96](../util/metrics.py#L88-L96) → [util/metrics.py:234](../util/metrics.py#L234)
-- **越小越均衡**，下界 1.0（完全均衡）。
-- 注意：`avg_card_lif` 只对 `lif_t > 0` 的 tick 取均值，全空载 tick 不参与。
+执行extension包含同卡屏障等待，执行减速比仍execution/T。实际完成和资源释放由真实NoC屏障决定，不使用预测完成时间。单卡固定场景仍以start_tick计量；多卡指标比较使用顶层文件，避免遗漏arrival至requested期间的等待。
 
-### 1.4 `max_min_ratio` — Max/Min 比
+状态包括completed、unfinished（已启动）、placed（已预留未启动）、pending（已到达未放置）、not_arrived（运行截断在到达前）、unschedulable（单任务超卡容量）。整体status为completed、completed_with_rejections或max_ticks，只有全部成功completed才valid=True。不要把未完成时间写0；无完成任务的派生均值虽然取0，completed_task_statistics.samples=0明确无样本。
 
-```text
-per-tick:  ratio_t = max(L_{i,t}) / min_{L_{i,t} > 0}(L_{i,t})   # 跳过零负载卡
-report:    max_min_ratio = mean over { t ∈ steady : ratio_t > 0 }
-```
+新增文件：
 
-- 代码：[util/metrics.py:98-104](../util/metrics.py#L98-L104) → [util/metrics.py:242](../util/metrics.py#L242)
-- **越小越均衡**。剔除零负载卡是为避免除零；当 N=16 时，少数 tick 有零负载卡，分母只取正项。
-- 这是 [Q0_result.md §4](Q0_result.md) 看到 STPS 在 16-card 反而更优的指标 —— 它对“尾点过载”最敏感。
+| 文件 | 内容 |
+| --- | --- |
+| decisions.csv | 每次放置尝试的物理Tick、policy、place/wait/unschedulable、eligible/sample卡ID、打分、最终card/mapping、需求与离线均值；STPS另记偏移、预测起止和全部实际评估候选 |
+| card_resources.csv | 每卡Tick末预留核槽/内存、未完成预留任务、运行/尚未启动任务与均值账本；完成释放后取样 |
+| cluster_tick.csv | 各卡物理Tick求和MEASURES和endpoint_events=Tx+Rx、active/waiting/placed_waiting/pending/completed任务数 |
+| balance_windows.json | full[1,ticks_executed]与预先固定steady的逐卡SOP、offered/served通信累积，以及CV/JFI/LIF/P99-to-Mean/Max-to-Mean和逐Tick尾部汇总 |
+| sliding_balance.csv | 每个完整W Tick滑窗的逐卡计算/offered/served负载和跨卡多维比率；W由场景配置 |
+| report.html | 各卡曲线/热图、资源热图、arrival至completion时间线；紫色标主动延迟，单列资源/主动/边界等待；链接各卡详细报告 |
 
-### 1.5 `avg_load_imbalance` — Load Variance 平均
+cluster_tick的active_tasks是各卡当前轮次参与数，waiting_tasks来自卡上已放置未启动；placed_waiting_tasks按请求生命周期复算，pending_tasks为已到达未放置。completed_tasks累计。末端库存跨卡求和后只取最后Tick为manifest totals库存，累计事件沿所有Tick求和。
 
-```text
-per-tick:  var_t = Σ_i (L_{i,t} − mean)² / N           # 非 N-1
-report:    avg_load_imbalance = mean_{t ∈ all_snapshots} var_t   # 注意：不裁 steady window
-```
+manifest.timing新增tasks_total/completed/rejected/not_arrived/arrived/unfinished、task_throughput_per_tick、ticks_executed、run_complete。makespan_ticks只取已完成任务最大completion，未完成运行不能用它代表整体完工；total_completion_span_ticks仅所有任务成功完成时非空。对task_execution_ticks、task_end_to_end_ticks、resource_wait_ticks、phase_wait_ticks、boundary_wait_ticks、communication_extension_ticks、slowdown分别输出mean_和p95_前缀字段；例如mean_phase_wait_ticks。它们只取已完成任务，completed_task_statistics保留sum/samples/mean_denominator；未完成、拒绝单列不混入成功均值。
 
-- 代码：[util/metrics.py:56-62](../util/metrics.py#L56-L62) → [util/metrics.py:199](../util/metrics.py#L199)
-- 单位是 `(B/tick)²`，因此数值通常很大（Q0 表里 1e10 量级）。
-- **注意**：`avg_load_imbalance` 与上面 4 个不同，**不裁剪 steady window**，含 warmup/teardown。
+card_communication_extension_ticks/card_barrier_blocked_ticks/card_rounds_started/active_card_ticks在全卡所有物理Tick上累积，是card-Tick，不是集群时钟长度。不能把所有卡extension相加冒充每个任务extension。
 
----
+窗口各卡x可取计算SOP、offered通信`2×generated_tx`或served通信`Tx+Rx`，包含所有空闲卡。分别定义：
 
-## 1b. 时间维负载均衡类（单卡 T 序列内离散度）
+$$
+\bar x=\frac1M\sum_mx_m,\quad CV=\frac{\sqrt{M^{-1}\sum_m(x_m-\bar x)^2}}{\bar x},\quad JFI=\frac{(\sum_mx_m)^2}{M\sum_mx_m^2},\quad LIF=\frac{\max_mx_m}{\bar x}.
+$$
 
-> **设计目的**：与 §1 的空间维（across cards, per-tick）正交。§1 衡量 “某一 tick 上 N 张卡是否分得均”，**§1b 衡量 “某一张卡在自己 T 个 tick 上是否打得均”** —— 即单卡时间轴上的负载是否平滑还是 spikey。
->
-> **样本空间**：对每张卡 `i`，取它在 steady-state 窗口内的 served 序列 `L_i = (L_{i, t_0}, L_{i, t_0+1}, …, L_{i, t_1})`，长度 `T = t_1 − t_0 + 1`（Q0 默认 384）。
->
-> **报告方式**：每张卡得到一个标量；**有 N 张卡就有 N 个独立的时间维负载均衡值**，不预先在卡之间平均。汇总时既给 *per-card 向量*（写入 raw CSV 一列一张卡），也给 *cross-card 摘要*（mean / std / max / min / median 五个标量进 summary CSV，便于跨调度器横比）。
->
-> **与 §1 的对比口诀**：
->
-> - §1 = `time-of(space-stat(L_{i,t}))` —— 先 across cards 算离散度，再沿 time 取均值。
-> - §1b = `space-of(time-stat(L_{i,t}))` —— 先沿 time 算离散度（per card），再用 N 个值描述卡间分布。
->
-> 两者用同一份 `card_load` 三维数据，仅聚合顺序相反。STPS 的 Stage B 错峰直接作用在 *单卡 T 序列* 上，所以 §1b 才是 STPS 的“主场”指标。
+实现先除以normalization_scale=max(x)稳定计算，保留所有原始逐卡累积，以及每个比率的value/numerator/denominator/zero_denominator、mean_load/zero_load。全零时三比率均0；计算与通信独立，不相加。full是实际观察窗，因此窗口complete可以True而整个run_complete=False；steady若在截断点之后尚未观察则complete=False、不补0。自然终止后才能将未来steady余Tick补0，padded_zero_ticks明确记录；若有unschedulable任务，run_complete只表示无剩余待处理，overall valid仍False。
 
-### 1b.1 `time_card_cv` — 单卡时间序列 CV
+全局mean source/Rx/excess和Routerwait per generated由总分子/总分母计算。全局Rx/excess p95由内存中各任务精确直方图合并，不平均卡级分位。manifest.conservation保留四个守恒残差及valid；窗口内Tx-Rx是起止在网库存差，不代表丢包或卡间通信。
 
-```text
-per-card:   tcv_i = std_t(L_{i,t}) / mean_t(L_{i,t})            t ∈ steady window
-report  :   时间序列上的“起伏程度”，每卡一个标量
-summary :   time_card_cv_mean   = mean_i tcv_i
-            time_card_cv_max    = max_i tcv_i        # 抖得最厉害的那张卡
-            time_card_cv_min    = min_i tcv_i        # 最平的那张卡
-            time_card_cv_std    = std_i tcv_i        # 卡之间的“抖动差异”
-            time_card_cv_median = median_i tcv_i
-```
+六策略比较使用Poisson/bursty、24/48任务和5个配对种子，输入来自独立校准/验证/测试的合成小图。SOP仍没有服务周期；计算均衡是工作量分配指标，不能据执行时间认定计算加速。row-major一致也不排除不同空核形状的路由影响；报告保存每任务mapping供复核。
 
-- mean_t ≤ 0 → 该卡返回 0（卡全程空载，无意义）。
-- **越小越平滑**。STPS Stage B 错峰若有效，应直接降低 `time_card_cv_mean` 与 `time_card_cv_max`。
-- 与 §1.1 区分：§1.1 `card_cv` 是“某一 tick 上卡间离散”，1b.1 是“某一张卡 T 个 tick 内时间离散”。
+## 11. STPS 决策、预测误差与实验产物
 
-### 1b.2 `time_card_jfi` — 单卡时间序列 Jain's Fairness
+STPS只用离线SchedulingFingerprint和当时已观察的任务进度、队列库存做预测。profile中的expected_edge_flits与compute_total_sops是需求预测；本页MEASURES仍来自测试Workload的实际生成与NoC事件。profile均值不是实际吞吐，也不替代均衡统计。
 
-```text
-per-card:   tjfi_i = (Σ_t L_{i,t})² / (T · Σ_t L_{i,t}²)        T = len(steady window)
-summary :   mean/max/min/std/median over cards
-```
+| manifest/任务字段 | 说明 |
+| --- | --- |
+| stps | 本次d_max/gamma/max_rounds/objective/balance_slack/权重；基线为null。adaptive开关由场景配置控制，各卡manifest的adaptive_ledger块记录实际校正是否发生 |
+| scheduling.attempts | 非永久拒绝任务的放置尝试次数，包括资源暂满的wait |
+| scheduling.seconds / mean_seconds | 资源筛选、策略评分、提交和决策行构建的墙钟秒数 / attempts；无尝试取0。CSV实际写出在计时之外 |
+| scheduling.evaluated_candidates | STPS全部尝试实际评估的卡＋去重偏移候选数；基线为0 |
+| scheduling.delayed_tasks | 选择phase_offset_ticks>0的任务数，包括截断时仍未启动者 |
+| scheduling.phase_offset_ticks_sum | 所有选定偏移d之和；截断时可大于已观察phase_wait_ticks之和 |
+| tasks[].profile_path / profile_sha256 | 独立预测文件路径与内容hash；用于关联校准来源，未使用profile的基线任务为null |
+| predicted_actual_start / predicted_completion | 放置决策时预测的实际开始/完成物理Tick；只用于观测，不控制真实释放 |
+| start_prediction_error_ticks | actual_start-predicted_actual_start；正数表示比预测更晚，未开始为空 |
+| completion_prediction_error_ticks | completion-predicted_completion；正数表示比预测更晚，未完成为空 |
 
-- 范围 (0, 1]；**越大越平滑**（全均匀时 → 1.0，全集中在 1 个 tick → 1/T）。
-- 全卡全程 0 → 该卡返回 1.0。
+predicted字段及两类误差同时出现在顶层task_summary.csv和manifest.tasks。预测依据是放置时已知尾部，之后新到达任务可能改变共卡通信，因此误差同时包含指纹/时长代理误差和后续任务干扰。基线没有生成这些预测，字段为空。
 
-### 1b.3 `time_card_lif` — 单卡时间序列 Load Imbalance Factor
+decisions.csv的STPS rows包含phase_offset_ticks、predicted_actual_start、predicted_completion、candidates。candidates是JSON数组；scores也保存同一候选列表，eligible_card_ids仍表示当时资源可行卡，sampled_card_ids为空。相同预测加入边界的d会合并，所以列表不是所有整数d的重复展开。每个候选字段为：
 
-```text
-per-card:   tlif_i = max_t(L_{i,t}) / mean_t(L_{i,t})
-summary :   mean/max/min/std/median over cards
-```
+| 候选字段 | 单位与口径 |
+| --- | --- |
+| card_id / delay / mapping | 候选卡、请求偏移、共同mapper给出的固定物理核列表 |
+| predicted_actual_start / predicted_completion | 此候选的预测起止物理Tick |
+| completion_cost | 新任务预测完成-current_tick+1，包含候选主动/边界等待 |
+| externality_ticks | 对当前卡已有任务逐个求max(0,插入后预测完成-未插入预测完成)再求和 |
+| J | completion_cost+externality_ticks；选择的首要目标 |
+| peak_comp / peak_noc | 预测已知尾部各轮的SOP峰值 / 跨核需求端点峰值；peak_noc也包含当前未完成轮次的残余端点需求 |
+| pressure | max(peak_comp/compute_budget_sops,peak_noc/noc_budget_endpoint)；J同分时比较 |
+| predicted_rounds | 此候选预测的尾部轮次数，含开放轮次的残余部分 |
+| predicted_residual_ticks | 当前开放轮次还需占用的预测物理Tick数；没有开放轮次为0 |
+| predicted_existing_completions / baseline_existing_completions | 插入/不插入新任务时，现有task_id到预测完成Tick的字典 |
 
-- 物理含义：**单卡 spike 高度相对自己平均负载的倍数**。一张卡如果整段稳定打满 → tlif≈1；如果只在某几个 tick 打 spike，其余 idle → tlif >> 1。
-- mean_t ≤ 0 的卡不参与 cross-card 摘要（与 §1.3 同源逻辑）。
-- **越小越平滑**，下界 1.0。
-- 这是与 NoC 拥塞 (`avg_congestion_ratio`) 关联最直接的指标 —— spike 高度越高，越容易超 `bw_cap`。
+来自源pending/NI的一个未到达包还需Tx和Rx，残余端点量计2；已经在Router中的包只剩Rx，计1；sink库存已Rx，不再计端点需求，但占用目的容量。候选peak_noc是预测需求峰值，不等于某个真实物理Tick的tx_injected+rx_ejected。`objective=completion`按(J,pressure,delay,card_id)选择；`objective=balance`先保留J不超过相对slack的候选，再按投影双负载均衡、J、pressure、delay、card_id选择。
 
-### 1b.4 `time_card_max_min_ratio` — 单卡时间序列 Max/Min
+[compare_stps.py](../script/compare_stps.py)生成冻结输入与旧累计比较产物；当前多维热点结果由[compare_stps_hotspots.py](../script/compare_stps_hotspots.py)生成，结果解释见 [stps_hotspots.md](results/stps_hotspots.md)。
 
-```text
-per-card:   tmm_i = max_t(L_{i,t}) / min_{L_{i,t} > 0}(L_{i,t})    跳过零负载 tick
-summary :   mean/max/min/std/median over cards (skip card if no positive tick)
-```
+| 产物 | 指标及范围 |
+| --- | --- |
+| plan.json / input_hashes.json | 仿真前固定的工作点、种子、样本划分、分析规则及输入hash；不是性能结果 |
+| calibration/calibration.csv | 独立校准组合的实际清空cycle、需求代理及比例；仅其非零需求比例拟合gamma |
+| calibration/validation.csv、summary.json | 独立验证的known_flow、mean_profile、residual三类cycle/轮长误差；all和active分别汇总，防止大量零步掩盖预测误差 |
+| raw.csv | 每次运行的实际状态、计数、时间、均衡及分子/分母、调度开销；两个prediction_error字段分别附_mae/_bias/_samples |
+| summary.json / summary.csv | 每到达模式、任务数、策略的有效次数、均值、样本标准差；无效运行保留，不混入完整运行均值 |
+| paired.csv | 同模式/任务数/seed的STPS与各基线差值、改善方向、胜/平/负与有效配对数；零基线不算相对百分比 |
+| best_baseline.csv | 每个指标按跨种子均值选出的最佳观测基线及STPS配对差值；基线名称随指标改变，不构成额外策略 |
+| index.html | 比较汇总与内嵌SVG图；各运行manifest可追溯实际任务与候选 |
 
-- 物理含义：单卡负载的“峰谷比”。
-- **越小越平滑**，下界 1.0。零负载 tick 全程被剔除，避免 `min=0` 把比值打到无穷。
+验证error为预测减真实，cycle_mae/round_mae是绝对误差均值，cycle_bias/round_bias为有符号均值，round_exact/under/over_count保留分子；cycle_p95_absolute_error使用NumPy分位插值。这与在线任务误差“真实减预测”的方向相反，不能直接合并。初始新轮次验证sink为空，残余验证读取执行K cycle后的库存；这些验证不等于所有运行期队列组合的准确性保证。
 
-### 1b.5 `time_card_load_variance` — 单卡时间序列 Load Variance
+比较必须同时给计算与通信均衡、端到端与主动等待、实际通信extension/包等待及完成率。CV越小、JFI越接近1、LIF越接近1表示对应窗口更均衡；全零窗口按0输出且zero_load=True，需要排除空工作量的误读。五个种子的配对统计是本合成工作点的描述，不能据此推导真实模型或所有负载下的优势。
 
-```text
-per-card:   tvar_i = Σ_t (L_{i,t} − mean_t)² / T
-summary :   mean/max/min/std/median over cards
-```
+## 12. P99、最大均值比与高频滑动窗口
 
-- 单位 `(B/tick)²`；保留是为与 §1.5 `avg_load_imbalance` 同口径做对照（一个是“across cards 取 var”，这里是“along time 取 var”）。
-- **越小越平滑**。
+全程累计CV会掩盖短时热点。每个时间口径现在同时输出CV、JFI、LIF、P99-to-Mean和Max-to-Mean。LIF就是最大均值比：
 
-### 1b.6 实现与输出约定
+$$
+LIF=\frac{\max_m x_m}{\bar x}.
+$$
 
-- **聚合代码位置**：拟新增 `SimulationMetrics.time_card_*` 系列 properties，输入 `_steady_window()` 的 snapshots，先按 `card_id` 重排成 `{card_id: List[load]}`，再对每张卡用 numpy 计算 cv/jfi/lif/maxmin/var。
-- **Summary CSV 增列**（每个指标贡献 5 个标量）：
-  `time_card_cv_{mean,max,min,std,median}`, `time_card_jfi_{...}`, `time_card_lif_{...}`, `time_card_max_min_ratio_{...}`, `time_card_load_variance_{...}` —— 共 25 个新列。
-- **Per-card 详细列**写入 `*_loads_*.csv` 同目录的 `*_time_balance_*.csv` 旁路文件，每行 `(card_id, tcv, tjfi, tlif, tmm, tvar)`，N 行。
-- **Steady window 一致**：与 §1 / §2 完全相同 (skip 64 head/tail when snapshots > 128)。
-- **优劣方向汇总**：cv ↓、jfi ↑、lif ↓、max_min_ratio ↓、load_variance ↓。
+P99采用跨卡nearest-rank。只有4张卡时P99等于最大卡，所以P99-to-Mean与Max-to-Mean相同；卡数增加后两者可分离。全零负载时比率取0，保留分子/分母和zero标记。
 
-### 1b.7 与 STPS 的关联预期
+通信分为offered_endpoint_events=2×generated_tx与实际endpoint_events=tx_injected+rx_ejected。固定窗、截断和拥塞诊断优先同时看offered与served，避免反压使成功收发低而误判为轻载。
 
-- **time_card_lif_mean** 期望：STPS < baseline（Stage B 把同卡上多任务的 spike 错开 → 单卡 spike 高度降）。
-- **time_card_cv_max** 期望：STPS < baseline（最 spike 的那张卡被压平最多）。
-- **time_card_jfi_mean** 期望：STPS > baseline。
-- 同时 §1 的 `card_cv`（across cards）期望维持或略高 —— 这正是 [Q0_result.md §6](Q0_result.md) 里 “拥塞降但空间均衡未降” 的指标级解释：STPS 改善的是 §1b 而不是 §1。
+每个full/steady窗口的temporal_hotspots先逐Tick计算跨卡CV/JFI/LIF/P99-to-Mean/Max-to-Mean，再对这条时间序列输出samples、mean、P95、P99和max。time_card_distribution合并窗口内全部card×tick样本，输出load P99/mean和max/mean。自然结束只在窗口complete时补零，截断不补未观察时间。
 
----
+sliding_balance.csv实现固定宽度滑动窗口：对每个结束Tick，先聚合每卡[t−W+1,t]内的SOP、offered通信和served端点量，再计算跨卡多维指标。只输出完整W样本，不用启动阶段的短窗口冒充固定窗口。manifest.sliding_windows按W和负载汇总比率时间序列的mean/P95/P99/max；默认W=1/4/8 Tick，场景sliding_window_ticks可配置。
 
-## 2. 时间维拥塞类（per-tick bandwidth contention）
-
-这些 metric 来自 `bw_cap` 钳制后的 `(demand, served, backlog)` 三元组，定义在 [engine.py:344-378](../simulation/engine.py#L344-L378)，聚合在 [util/metrics.py:254-339](../util/metrics.py#L254-L339)。**衡量的是“tick 级 spike 有没有撞 cap”。**
-
-### 2.1 `avg_congestion_ratio`
-
-```text
-per-card per-tick:  cong_{i,t} = (demand_{i,t} − served_{i,t}) / demand_{i,t}    if demand > 0
-                                = 0                                              otherwise
-report:             avg_congestion_ratio = mean over all (i, t) in steady window
-```
-
-- 代码：[util/metrics.py:178-181](../util/metrics.py#L178-L181) 算每卡每 tick 的 cong → [util/metrics.py:254](../util/metrics.py#L254) 平铺平均。
-- 范围 [0, 1)，**越小越好**。
-- 当 `demand ≤ bw_cap` 时 served=demand → ratio=0；溢出时 ratio = (1 − scale) = (demand − bw_cap)/demand。
-
-### 2.2 `congested_card_tick_frac`
-
-```text
-report = # { (i, t) ∈ steady : cong_{i,t} > 1e-9 } / # { (i, t) ∈ steady }
-```
-
-- 代码：[util/metrics.py:272-284](../util/metrics.py#L272-L284)
-- 拥塞 (i,t) 的占比 ∈ [0, 1]；**越小越好**。
-- 与 `avg_congestion_ratio` 区别：前者衡量 “拥塞窗口的高度”（含 0 的均值），后者衡量 “拥塞窗口的宽度”。
-
-### 2.3 `peak_backlog`
-
-```text
-report = max over (i, t) ∈ steady  card_backlog_{i,t}
-       = max  Σ_tasks_on_card_i_at_t  task.pending_traffic
-```
-
-- 代码：[util/metrics.py:265-270](../util/metrics.py#L265-L270)
-- 单位 B；steady 窗口内单卡 backlog 的最大值。
-- **越小越好**，对 STPS 不一定占优（[Q0_result.md §5](Q0_result.md) §9.4：STPS 强在持续时间不在峰值）。
-
-### 2.4 `avg_utilization`
-
-```text
-per-card per-tick:  util_{i,t} = served_{i,t} / bw_cap                 if bw_cap > 0
-                              = 0                                      otherwise
-report:             avg_utilization = mean over all (i, t) in steady
-```
-
-- 代码：[util/metrics.py:182-185](../util/metrics.py#L182-L185), [util/metrics.py:286-295](../util/metrics.py#L286-L295)
-- 没有 `bw_cap` 时返回 0；范围 [0, 1]；**越大越好**（在 completion_rate=1 的前提下）。
-
-### 2.5 `mean_congestion_wait_ticks` / `p95_congestion_wait_ticks`
-
-```text
-per-task lifetime counter:  task.congestion_wait_ticks += 1  each tick the task has leftover
-report mean:  mean over all completed/recorded tasks
-report p95 :  numpy.percentile(values, 95)
-```
-
-- 代码：每 tick 在 [engine.py:366](../simulation/engine.py#L366) 累加 → 任务完成时 [engine.py:451](../simulation/engine.py#L451) push 进 `metrics.congestion_wait_ticks` → [util/metrics.py:329-339](../util/metrics.py#L329-L339) 聚合。
-- 单位 ticks，**越小越好**。
-- 注意它是 **任务级** 统计（每完成 1 任务 1 个样本），不是 tick 级。
-
-### 2.6 `avg_demand_cv` / `avg_backlog_cv`
-
-```text
-avg_demand_cv  = mean_{t ∈ steady} std_i(card_demand_{i,t})  / mean_i(card_demand_{i,t})
-avg_backlog_cv = mean_{t ∈ steady} std_i(card_backlog_{i,t}) / mean_i(card_backlog_{i,t})
-```
-
-- 代码：[util/metrics.py:297-327](../util/metrics.py#L297-L327)
-- 各自衡量 “demand / backlog 在卡之间是否平均”；与 §1 的 `card_cv` 是 served 维度，三者并列。
-
-### 2.7 `congestion_timeouts`
-
-```text
-report = Σ #{ tick at which task.blocked_ticks > MAX_BACKLOG_TICKS, forcing drain }
-```
-
-- 代码：[engine.py:369-373](../simulation/engine.py#L369-L373) 触发 → `metrics.congestion_timeouts` 累加。
-- Q0 / traffic 中实测 = 0 → completion_rate 才能 1.000。
-
----
-
-## 3. 延时类（per-task arrival → completion）
-
-每个完成的任务推一个 `TaskDelay` 记录 ([util/metrics.py:20-33](../util/metrics.py#L20-L33))，`total_delay = completion_step − arrival_step`。**注意是 `arrival → completion`，含 placement 等待与 NoC 排队**，不只算执行时间。
-
-```text
-delays = [ d.total_delay for d in task_delays if d.total_delay >= 0 ]    # 过滤未完成
-
-p50_delay  = numpy.percentile(delays, 50)
-p95_delay  = numpy.percentile(delays, 95)
-p99_delay  = numpy.percentile(delays, 99)
-avg_delay  = numpy.mean(delays)
-max_delay  = max(delays)
-```
-
-- 代码：[util/metrics.py:356-404](../util/metrics.py#L356-L404)
-- 单位 ticks，**越小越好**。
-- **重要警告**：当 `completion_rate < 1.0` 时，这些分位数只覆盖 *完成* 的任务，未完成的高延时任务不在样本里 —— 此时不能直接拿来跨调度器比较。Q0 已保证 `completion_rate=1.000`，故可比；traffic_result.md §4 也强调过此点。
-
----
-
-## 4. 吞吐 / 完成率类
-
-### 4.1 `throughput`
-
-```text
-throughput = tasks_completed / total_snapshots
-           = tasks_completed / steps                # snapshots 数 = simulate 的 tick 数
-```
-
-- 代码：[util/metrics.py:341-347](../util/metrics.py#L341-L347)
-- 单位 tasks/tick；**越大越好**。
-- 注意分母是 **全段 tick 数**（含 warmup），不裁 steady window。
-
-### 4.2 `completion_rate`
-
-```text
-completion_rate = tasks_completed / task_count
-```
-
-- 代码：[util/metrics.py:349-354](../util/metrics.py#L349-L354)
-- 范围 [0, 1]；**主报指标，必须先看它**。Q0 / traffic 全部 = 1.000 → 可比性前提满足。
-
-### 4.3 `tasks_completed` 的判定
-
-任务在 `_handle_completions` 被认定为完成的条件 ([engine.py](../simulation/engine.py))：
-
-1. trace 已喂完（`tick_index ≥ T`）；
-2. `duration_steps` 倒计时到 0；
-3. `pending_traffic` 已排空（或被 timeout 断路器强清）。
-
-只要触发 §2.7 的 timeout 强清，该任务的 `congestion_wait_ticks` 已累加、`pending_traffic` 被丢弃残量但仍正常完成 —— 这会拉低 throughput 不会拉低 completion_rate。
-
----
-
-## 5. STPS 专属
-
-### 5.1 `mean_start_offset` / `p95_start_offset`
-
-```text
-on STPS admit:   metrics.start_offsets.append(task.start_offset)
-report mean:     numpy.mean(start_offsets)
-report p95 :     numpy.percentile(start_offsets, 95)
-```
-
-- 代码：[util/metrics.py:156](../util/metrics.py#L156) → [util/metrics.py:406-417](../util/metrics.py#L406-L417)
-- 单位 ticks，仅 STPS 系列 > 0；baseline 全 0。
-- 是 Layer 1 intrinsic offset cost 的直接代理。
-
-### 5.2 `reject_rate_bw`
-
-```text
-reject_rate_bw = bw_rejections / task_count
-              = #{ task with reject_reason = "bw_max_exceeded" } / total
-```
-
-- 代码：[util/metrics.py:159-161](../util/metrics.py#L159-L161) → [util/metrics.py:419-423](../util/metrics.py#L419-L423)
-- 在 [traffic_optim.md §5](traffic_optim.md) 改造后 STPS 不再 reject，该项实测 = 0。保留是为了与旧版兼容、并捕获其他可能的 reject 来源。
-
----
-
-## 6. 三类指标的物理对应
-
-把 §1 / §2 / §3 三组指标放到同一时空格里，看清楚它们各自衡量的是什么：
-
-```text
-                  空间维 (across cards, per-tick)        时间维 (within card, along T)         瞬态拥塞 (per-tick)
-                  ------------------------------------   ------------------------------------  --------------------------------
-served (实际)     card_cv, card_jfi, card_lif,           time_card_cv, time_card_jfi,          —
-                  max_min_ratio, avg_load_imbalance      time_card_lif, time_card_max_min,
-                  [§1]                                   time_card_load_variance [§1b]
-
-demand (请求)     avg_demand_cv [§2.6]                   —                                     avg_congestion_ratio,
-                                                                                              congested_card_tick_frac
-                                                                                              [§2.1-2.2]
-
-backlog (队列)    avg_backlog_cv [§2.6]                  —                                     peak_backlog [§2.3],
-                                                                                              mean/p95_cong_wait_ticks (per-task)
-
-util (= s/cap)    —                                      —                                     avg_utilization [§2.4]
-
-delay (per-task)  —                                      —                                     avg/p50/p95/p99/max_delay [§3]
-```
-
-[Q0_result.md §1-§4](Q0_result.md) 用的列表里：
-
-- **空间均衡列** (`card_cv / JFI / LIF / max_min_ratio`) 全部来自 §1 —— across cards, per-tick。
-- **时间均衡列** (`time_card_cv / time_card_jfi / time_card_lif / time_card_max_min_ratio`) 来自 §1b —— within card, along T；STPS Stage B 的“主场”指标。
-- **瞬态拥塞列** (`cong_ratio / cong_wait`) 来自 §2.1 / §2.5。
-- **吞吐 / 延时列** 来自 §4 / §3。
-
-四组互不相同维度，所以 “STPS §1 不赢 + §1b 赢 + §2 赢 + §4 略输” 这些反直觉现象都能在表格里同时出现，不矛盾 —— 它们度量的根本不是同一回事。
-
----
-
-## 7. 复现 / 重算
-
-```bash
-/root/miniconda3/envs/snn/bin/python -c "
-import csv, statistics
-with open('data/q0/main_summary.csv') as f:
-    for row in csv.DictReader(f):
-        print(row['scheduler'], row['card_cv_mean'], row['avg_congestion_ratio_mean'])
-"
-```
-
-per-seed raw 数据：[`data/q0/main_raw.csv`](../data/q0/main_raw.csv)、[`data/q0/arrival_raw.csv`](../data/q0/arrival_raw.csv)、[`data/q0/scale16_raw.csv`](../data/q0/scale16_raw.csv)。
-
-per-tick snapshot 数据（含 demand/served/backlog/cong/util 6 列）：`data/q0/_raw/*_loads_*.csv`（由 [MetricsWriter.start_csv](../util/metrics.py#L484) 产生）。
+若芯片已标定physical_tick_ms，可通过sliding_window_ms声明100/500/1000ms等窗口，转换为ceil(window_ms/physical_tick_ms)个Tick；没有物理Tick时长时禁止使用毫秒窗口，只报告Tick窗口。CV曲线的陡峰表示阶段性跨卡不均衡，还需与库存、Router wait、任务E2E和完成率一起判断是否形成实际straggler。

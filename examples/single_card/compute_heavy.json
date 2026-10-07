@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "units": {
+    "traffic": "flits_per_logical_tick",
+    "compute": "sops_per_logical_tick"
+  },
+  "state_size_mb": 1.0,
+  "source": "synthetic:hand-counted-compute_heavy",
+  "metadata": {
+    "purpose": "phase1 sparse temporal replay; independent synthetic SOPs"
+  },
+  "pop_size": [
+    64,
+    64
+  ],
+  "edge_src": [
+    0,
+    0
+  ],
+  "edge_dst": [
+    1,
+    0
+  ],
+  "edge_expected_flits": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      2.0
+    ],
+    [
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "compute_sops": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      500.0,
+      300.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      900.0,
+      800.0
+    ],
+    [
+      250.0,
+      200.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ]
+}

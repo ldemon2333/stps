@@ -1,345 +1,603 @@
-"""STPS (Spatio-Temporal Proactive Scheduling) — paper §4.3.
+"""Joint card/start-offset selection using offline profiles and observed state.
 
-Three-stage hierarchical pipeline:
-    Stage 1: Macro-Card Dispatching (fragmentation + temporal isolation)
-    Stage 2: Micro-Temporal Phase-Shifting (Algorithm 1)
-    Stage 3: Micro-Spatial Mapping with Hotspot Splitting
-
-Two ablation variants are exported alongside the full scheduler:
-    STPSSpatialScheduler  — Stage 1 + Stage 3 only (no phase shifting).
-    STPSTemporalScheduler — Stage 2 only (no fragmentation / no hotspot split).
+This is a bounded aggregate forecast, not a second packet simulator. XY paths,
+source/destination demand, shared links and receive-buffer pressure determine
+a calibrated cycle proxy. No future replay Workload is accepted by this API.
 """
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass, field
 import math
-from typing import TYPE_CHECKING, List, Optional
+from numbers import Integral, Real
+from typing import Iterable, Mapping, Sequence
 
-import numpy as np
-
-from .base import BaseScheduler, register_scheduler
-from .hotspot_split import split_population
-from .phase_shift import find_optimal_offset
-from fingerprint import Fingerprint, effective_traffic_trace
-
-if TYPE_CHECKING:
-    from util.card import Card
-    from util.task import Task
+from fingerprint.scheduling import SchedulingFingerprint
+from simulation.noc import NoCConfig
 
 
-logger = logging.getLogger(__name__)
+def _integer(value, name, minimum=0):
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    return int(value)
 
 
-class STPSScheduler(BaseScheduler):
-    """Full STPS scheduler with all three stages enabled."""
-
-    USE_STAGE1 = True
-    USE_STAGE2 = True
-    USE_STAGE3 = True
-
-    def __init__(
-        self,
-        cards: List["Card"],
-        horizon: int = 64,
-        d_max: int = 16,
-        bw_max: float = 1e9,
-        centrality_split_threshold: float = 0.2,
-        frag_weight: float = 1.0,
-        beta_weight: float = 1.0,
-        beta_high_threshold: float = 1.5,
-        ema_alpha: float = 0.3,
-        # docs/Q0_result.md §5.2 改动 A / D — load-aware extension to STPS.
-        # Both default to 0.0 so the base STPS scheduler remains bit-equivalent.
-        load_weight: float = 0.0,
-        backlog_weight: float = 0.0,
-        load_ema_alpha: float = 0.2,
-        # Stage 1 candidate pruning: drop top-fraction by score (= most loaded)
-        # so Stage 2 cannot pick a heavily-loaded card just because its forecast
-        # happens to be low. 0.0 = no pruning (old behavior).
-        stage1_cull_frac: float = 0.0,
-        # EXP-3 (robustness): multiplicative +/- noise applied to the *scheduler's
-        # view* of each fingerprint's traffic timeline and burstiness, modelling
-        # calibration-to-deployment drift. The engine still simulates the true,
-        # unperturbed fingerprint, so this isolates decision robustness. 0.0 =
-        # off (bit-equivalent to the base scheduler).
-        fingerprint_noise: float = 0.0,
-        fingerprint_noise_seed: int = 0,
-        **kwargs,
-    ) -> None:
-        super().__init__(cards=cards, **kwargs)
-        self.horizon = int(horizon)
-        self.d_max = int(d_max)
-        self.bw_max = float(bw_max)
-        self.centrality_split_threshold = float(centrality_split_threshold)
-        self.frag_weight = float(frag_weight)
-        self.beta_weight = float(beta_weight)
-        self.beta_high_threshold = float(beta_high_threshold)
-        self.ema_alpha = float(ema_alpha)
-        self.load_weight = float(load_weight)
-        self.backlog_weight = float(backlog_weight)
-        self.load_ema_alpha = float(load_ema_alpha)
-        self.stage1_cull_frac = float(stage1_cull_frac)
-        self.fingerprint_noise = float(fingerprint_noise)
-        self.fingerprint_noise_seed = int(fingerprint_noise_seed)
-        self._noisy_fp_cache: dict[int, "Fingerprint"] = {}
-        # Stage-3 hotspot split is a pure function of the offline fingerprint;
-        # memoize per fingerprint so its O(V') scan is not paid per admission.
-        self._split_cache: dict = {}
-        # Per-card EMA of served epoch load (改动 A). Maintained in step().
-        self._load_ema: dict[int, float] = {c.card_id: 0.0 for c in cards}
-        # Per-card EMA of epoch backlog (改动 D). Read from engine each step.
-        self._backlog_ema: dict[int, float] = {c.card_id: 0.0 for c in cards}
-        self.cluster_epoch_backlog: dict[int, float] = {c.card_id: 0.0 for c in cards}
-
-        for card in self.cards:
-            card.ensure_forecast(self.horizon)
-
-    @property
-    def name(self) -> str:
-        return "stps"
-
-    # ------------------------------------------------------------------
-    # Hooks
-    # ------------------------------------------------------------------
-
-    def step(self, time_step: int) -> None:
-        # Update per-card EMAs of served load + backlog (改动 A / D).
-        a = self.load_ema_alpha
-        for card in self.cards:
-            cid = card.card_id
-            load = float(self.cluster_epoch_loads.get(cid, 0.0))
-            backlog = float(self.cluster_epoch_backlog.get(cid, 0.0))
-            self._load_ema[cid] = (1.0 - a) * self._load_ema.get(cid, 0.0) + a * load
-            self._backlog_ema[cid] = (1.0 - a) * self._backlog_ema.get(cid, 0.0) + a * backlog
-            card.advance_forecast()
-
-    def on_task_completion(self, task: "Task", time_step: int) -> None:
-        # Forecast already rolls forward each step; nothing else to undo.
-        pass
-
-    # ------------------------------------------------------------------
-    # Placement -- replaces select_card_for_task entirely.
-    # ------------------------------------------------------------------
-
-    def select_card_for_task(self, task: "Task") -> Optional["Card"]:
-        fp = self._resolve_fingerprint(task)
-        if fp is not None and self.fingerprint_noise > 0.0:
-            fp = self._noisy_view(task, fp)
-
-        candidates = [c for c in self.cards if c.can_host(task)]
-        if not candidates:
-            return None
-
-        if self.USE_STAGE1 and fp is not None:
-            candidates = self._stage1_filter(candidates, fp)
-        if not candidates:
-            return None
-
-        if self.USE_STAGE2 and fp is not None:
-            chosen, offset, peak = self._stage2_phase_shift(candidates, fp)
-            if chosen is None:
-                return None
-            if peak > self.bw_max:
-                logger.debug(
-                    "[STPS] Task %s peak %.2f exceeds BW_max %.2f; using min-peak offset %d, NoC queue absorbs overflow",
-                    task.task_id, peak, self.bw_max, offset,
-                )
-            task.start_offset = int(offset)
-            chosen.ensure_forecast(self.horizon)
-            chosen.add_forecast(effective_traffic_trace(fp), offset)
-        else:
-            # No fingerprint or temporal stage disabled -- pick best Stage-1 candidate.
-            chosen = candidates[0]
-
-        if self.USE_STAGE3 and fp is not None:
-            task.split_plan = self._cached_split(task, fp)
-
-        if fp is not None:
-            chosen.update_beta_card(fp.global_burstiness, self.ema_alpha)
-
-        return chosen
-
-    # ------------------------------------------------------------------
-    # Stage helpers
-    # ------------------------------------------------------------------
-
-    def _stage1_filter(self, candidates: List["Card"], fp: Fingerprint) -> List["Card"]:
-        """Score candidates by fragmentation match + β isolation + (optional) load / backlog penalty."""
-        K = max(float(fp.mean_components), 1.0)
-        target_block = 1.0 / K  # cohesive task -> high fraction; decoupled -> low
-
-        # docs/Q0_result.md §5.2 改动 A / D: normalize EMA-load and EMA-backlog
-        # by the cluster max so the new terms are O(1) regardless of bw_cap.
-        max_load = max(self._load_ema.values(), default=0.0)
-        max_backlog = max(self._backlog_ema.values(), default=0.0)
-
-        scored = []
-        for card in candidates:
-            block = card.largest_free_block_ratio()
-            frag_score = abs(block - target_block)
-            beta_penalty = card.beta_card if fp.global_burstiness > self.beta_high_threshold else 0.0
-            load_penalty = (self._load_ema.get(card.card_id, 0.0) / (max_load + 1e-9)) if max_load > 0 else 0.0
-            backlog_penalty = (self._backlog_ema.get(card.card_id, 0.0) / (max_backlog + 1e-9)) if max_backlog > 0 else 0.0
-            score = (
-                self.frag_weight * frag_score
-                + self.beta_weight * beta_penalty
-                + self.load_weight * load_penalty
-                + self.backlog_weight * backlog_penalty
-            )
-            scored.append((score, card))
-
-        scored.sort(key=lambda x: x[0])
-        ranked = [c for _, c in scored]
-        # Cull worst-scoring fraction so Stage 2 cannot recover them.
-        if self.stage1_cull_frac > 0.0 and len(ranked) > 1:
-            keep = max(1, int(math.ceil(len(ranked) * (1.0 - self.stage1_cull_frac))))
-            ranked = ranked[:keep]
-        return ranked
-
-    def _stage2_phase_shift(self, candidates: List["Card"], fp: Fingerprint)-> tuple[Optional["Card"], int, float]:
-        best = None  # (card, offset, peak)
-        for card in candidates:
-            card.ensure_forecast(self.horizon)
-            forecast = card.forecast
-            assert forecast is not None  # guaranteed by ensure_forecast above
-            offset, peak = find_optimal_offset(
-                forecast, effective_traffic_trace(fp), self.d_max, self.bw_max
-            )
-            if best is None or peak < best[2]:
-                best = (card, offset, peak)
-        if best is None:
-            return None, 0, math.inf
-        return best
-
-    def _cached_split(self, task: "Task", fp: Fingerprint) -> List[int]:
-        """Memoize Stage-3 hotspot indices per fingerprint.
-
-        ``split_population`` depends only on the offline fingerprint's per-neuron
-        centrality and the fixed threshold -- not on any runtime state -- so it
-        is computed once per distinct fingerprint rather than per admission.
-        Without this the O(V') scan over multi-million-neuron centrality arrays
-        dominates the admission decision (EXP-2); memoization restores the
-        O(M)+O(D_max*H) online cost the design intends. Result is identical to
-        recomputing every call.
-        """
-        key = getattr(task, "fingerprint_path", None) or id(fp.max_centrality)
-        cached = self._split_cache.get(key)
-        if cached is None:
-            cached = split_population(fp.max_centrality, self.centrality_split_threshold)
-            self._split_cache[key] = cached
-        return cached
-
-    def _noisy_view(self, task: "Task", fp: Fingerprint) -> Fingerprint:
-        """Return a perturbed copy of ``fp`` for scheduling decisions only.
-
-        Applies deterministic multiplicative +/- ``fingerprint_noise`` noise to
-        the effective traffic timeline and to the burstiness scalar, modelling
-        the gap between the offline-calibrated fingerprint and the tenant's
-        actual deployment traffic (EXP-3). The engine keeps simulating the true
-        fingerprint via ``task.fingerprint``; only the scheduler sees the noisy
-        view. Cached per task so repeated stage calls are consistent.
-        """
-        import dataclasses
-        tid = int(getattr(task, "task_id", id(task)))
-        cached = self._noisy_fp_cache.get(tid)
-        if cached is not None:
-            return cached
-        rng = np.random.default_rng(
-            (self.fingerprint_noise_seed * 1_000_003 + tid) & 0xFFFFFFFF
-        )
-        p = self.fingerprint_noise
-
-        def _perturb(arr: np.ndarray) -> np.ndarray:
-            if arr is None or arr.size == 0:
-                return arr
-            factor = 1.0 + p * rng.uniform(-1.0, 1.0, size=arr.shape)
-            return np.maximum(arr.astype(np.float32) * factor, 0.0).astype(np.float32)
-
-        beta_factor = 1.0 + p * float(rng.uniform(-1.0, 1.0))
-        noisy = dataclasses.replace(
-            fp,
-            mean_injection_trace=_perturb(fp.mean_injection_trace),
-            sample_measured_injection_trace=_perturb(fp.sample_measured_injection_trace),
-            global_burstiness=max(0.0, float(fp.global_burstiness) * beta_factor),
-        )
-        self._noisy_fp_cache[tid] = noisy
-        return noisy
-
-    def _resolve_fingerprint(self, task: "Task")-> Optional[Fingerprint]:
-        """Lazy-load a fingerprint from disk if the task only carries a path."""
-        if task.fingerprint is not None:
-            assert isinstance(task.fingerprint, Fingerprint)
-            return task.fingerprint
-        path = getattr(task, "fingerprint_path", None)
-        if path is None:
-            return None
-        try:
-            from fingerprint import load_fingerprint  # local import to keep dep light
-            fp = load_fingerprint(path)
-        except Exception as exc:
-            logger.warning("[STPS] Failed to load fingerprint %s: %s", path, exc)
-            return None
-        task.fingerprint = fp
-        return fp
+def _number(value, name, *, positive=False):
+    if (isinstance(value, bool) or not isinstance(value, Real)
+            or not math.isfinite(value) or value < 0 or (positive and value == 0)):
+        raise ValueError(f"{name} must be a finite {'positive' if positive else 'nonnegative'} number")
+    return float(value)
 
 
-class STPSSpatialScheduler(STPSScheduler):
-    """Ablation: only Stage 1 fragmentation + Stage 3 hotspot splitting."""
-
-    USE_STAGE1 = True
-    USE_STAGE2 = False
-    USE_STAGE3 = True
-
-    @property
-    def name(self) -> str:
-        return "stps-spatial"
+def _mapping(mapping, profile, network=None):
+    result = tuple(_integer(core, "mapping core") for core in mapping)
+    if len(result) != profile.population_count or len(set(result)) != len(result):
+        raise ValueError("mapping must assign one distinct core per MicroPopulation")
+    if network is not None and any(core >= network.core_count for core in result):
+        raise ValueError("mapping core exceeds mesh")
+    return result
 
 
-class STPSTemporalScheduler(STPSScheduler):
-    """Ablation: only Stage 2 phase-shifting; ignores K̄ and hotspot split."""
+@dataclass(frozen=True)
+class STPSConfig:
+    d_max: int = 4
+    gamma: float = 1.0
+    max_rounds: int = 10000
+    objective: str = "completion"
+    balance_slack: float = 0.10
+    compute_weight: float = 1.0
+    noc_weight: float = 1.0
+    adaptive_ledger: bool = False
 
-    USE_STAGE1 = False
-    USE_STAGE2 = True
-    USE_STAGE3 = False
+    def __post_init__(self):
+        object.__setattr__(self, "d_max", _integer(self.d_max, "d_max"))
+        gamma = _number(self.gamma, "gamma", positive=True)
+        if gamma < 1:
+            raise ValueError("gamma must be >= 1")
+        object.__setattr__(self, "gamma", gamma)
+        object.__setattr__(self, "max_rounds", _integer(self.max_rounds, "max_rounds", 1))
+        if self.objective not in ("completion", "balance"):
+            raise ValueError("objective must be 'completion' or 'balance'")
+        object.__setattr__(self, "balance_slack", _number(
+            self.balance_slack, "balance_slack"))
+        object.__setattr__(self, "compute_weight", _number(
+            self.compute_weight, "compute_weight", positive=True))
+        object.__setattr__(self, "noc_weight", _number(
+            self.noc_weight, "noc_weight", positive=True))
+        if type(self.adaptive_ledger) is not bool:
+            raise ValueError("adaptive_ledger must be bool")
 
-    @property
-    def name(self) -> str:
-        return "stps-temporal"
+
+@dataclass(frozen=True)
+class ForecastTask:
+    task_id: str
+    profile: SchedulingFingerprint
+    mapping: tuple[int, ...]
+    next_step: int
+    requested_start_tick: int
+    running: bool
+
+    def __post_init__(self):
+        if not isinstance(self.task_id, str) or not self.task_id:
+            raise ValueError("task_id must be nonempty")
+        if not isinstance(self.profile, SchedulingFingerprint):
+            raise ValueError("profile must be a SchedulingFingerprint")
+        object.__setattr__(self, "mapping", _mapping(self.mapping, self.profile))
+        step = _integer(self.next_step, "next_step")
+        if step > self.profile.T or (not self.running and step != 0):
+            raise ValueError("next_step is the next unissued profile step; pending tasks must have step 0")
+        object.__setattr__(self, "next_step", step)
+        object.__setattr__(self, "requested_start_tick", _integer(
+            self.requested_start_tick, "requested_start_tick", 1))
+        if type(self.running) is not bool:
+            raise ValueError("running must be bool")
 
 
-class STPSLoadAwareScheduler(STPSScheduler):
-    """STPS + 改动 A (累计负载惩罚) + 改动 D (backlog-aware feedback).
+@dataclass(frozen=True)
+class CardForecastState:
+    card_id: int
+    tasks: tuple[ForecastTask, ...]
+    network_config: NoCConfig
+    cycles_per_tick: int
+    current_tick: int
+    round_open: bool
+    outstanding: tuple[dict, ...]
+    compute_budget_sops: float
+    noc_budget_endpoint: float
+    mapping: tuple[int, ...]
+    cumulative_assigned_compute_sops: float = 0.0
+    cumulative_assigned_noc_endpoint: float = 0.0
+    candidate_feasible: bool = True
 
-    See docs/Q0_result.md §5.2. Defaults chosen so the new penalty terms are
-    comparable in magnitude to the existing frag/β terms (which sit in [0, 1]).
+    def __post_init__(self):
+        object.__setattr__(self, "card_id", _integer(self.card_id, "card_id"))
+        if not isinstance(self.network_config, NoCConfig):
+            raise ValueError("network_config must be NoCConfig")
+        object.__setattr__(self, "cycles_per_tick", _integer(
+            self.cycles_per_tick, "cycles_per_tick", 1))
+        object.__setattr__(self, "current_tick", _integer(self.current_tick, "current_tick", 1))
+        if type(self.round_open) is not bool:
+            raise ValueError("round_open must be bool")
+        for name in ("compute_budget_sops", "noc_budget_endpoint"):
+            object.__setattr__(self, name, _number(getattr(self, name), name, positive=True))
+        for name in ("cumulative_assigned_compute_sops",
+                     "cumulative_assigned_noc_endpoint"):
+            object.__setattr__(self, name, _number(getattr(self, name), name))
+        tasks = tuple(self.tasks)
+        if any(not isinstance(task, ForecastTask) for task in tasks):
+            raise ValueError("tasks must contain ForecastTask snapshots")
+        if len({task.task_id for task in tasks}) != len(tasks):
+            raise ValueError("task_id values must be unique within a card")
+        reserved = set()
+        for task in tasks:
+            _mapping(task.mapping, task.profile, self.network_config)
+            if reserved.intersection(task.mapping):
+                raise ValueError("forecast tasks cannot share reserved cores")
+            reserved.update(task.mapping)
+            if task.next_step == task.profile.T and not (self.round_open and task.running):
+                raise ValueError("completed tasks must be removed from forecast state")
+            if self.round_open and task.running and task.next_step == 0:
+                raise ValueError("running tasks in an open round must have an issued step")
+        mapping = tuple(_integer(core, "candidate mapping core") for core in self.mapping)
+        if (len(set(mapping)) != len(mapping)
+                or any(core >= self.network_config.core_count for core in mapping)
+                or reserved.intersection(mapping)):
+            raise ValueError("candidate mapping must contain distinct currently free cores")
+        if self.round_open and not any(task.running for task in tasks):
+            raise ValueError("an open round requires a running task")
+        if type(self.candidate_feasible) is not bool:
+            raise ValueError("candidate_feasible must be bool")
+        if not self.candidate_feasible and mapping:
+            raise ValueError("an infeasible candidate card must use an empty mapping")
+        object.__setattr__(self, "tasks", tasks)
+        object.__setattr__(self, "mapping", mapping)
+        object.__setattr__(self, "outstanding", tuple(dict(row) for row in self.outstanding))
+
+
+@dataclass(frozen=True)
+class STPSDecision:
+    card_id: int
+    delay: int
+    mapping: tuple[int, ...]
+    predicted_actual_start: int
+    predicted_completion: int
+    J: int
+    peak_comp: float
+    peak_noc: float
+    pressure: float
+    projected_compute_cv: float
+    projected_noc_cv: float
+    balance_primary: float
+    balance_secondary: float
+    candidate_count: int
+    candidates: tuple[dict, ...]
+
+
+@dataclass
+class _Demand:
+    source: dict[int, float] = field(default_factory=dict)
+    destination: dict[int, float] = field(default_factory=dict)
+    links: dict[tuple[int, int], float] = field(default_factory=dict)
+    latency: int = 0
+    endpoints: float = 0.0
+
+    def add(self, other):
+        for ours, theirs in ((self.source, other.source),
+                             (self.destination, other.destination), (self.links, other.links)):
+            for key, value in theirs.items():
+                ours[key] = ours.get(key, 0.0) + value
+        self.latency = max(self.latency, other.latency)
+        self.endpoints += other.endpoints
+
+
+def _path(config, src, dst):
+    """Directed XY links, with row-major core IDs (x changes first)."""
+    path = []
+    current = src
+    x, y = src % config.mesh_x, src // config.mesh_x
+    dx, dy = dst % config.mesh_x, dst // config.mesh_x
+    while x != dx:
+        x += 1 if dx > x else -1
+        following = y * config.mesh_x + x
+        path.append((current, following))
+        current = following
+    while y != dy:
+        y += 1 if dy > y else -1
+        following = y * config.mesh_x + x
+        path.append((current, following))
+        current = following
+    return tuple(path)
+
+
+def _add_flow(demand, src, dst, count, path, *, source=True):
+    if count == 0:
+        return
+    if source:
+        demand.source[src] = demand.source.get(src, 0.0) + count
+    demand.destination[dst] = demand.destination.get(dst, 0.0) + count
+    for link in path:
+        demand.links[link] = demand.links.get(link, 0.0) + count
+    demand.latency = max(demand.latency, len(path) + (2 if source else 1))
+    demand.endpoints += count * (2 if source else 1)
+
+
+def _sink_vector(config, occupancy):
+    sink = [0.0] * config.core_count
+    if occupancy is None:
+        return sink
+    items = occupancy.items() if isinstance(occupancy, Mapping) else enumerate(occupancy)
+    if not isinstance(occupancy, Mapping) and len(occupancy) != config.core_count:
+        raise ValueError("sink_occupancy must contain one value per core")
+    for core, count in items:
+        core = _integer(core, "sink core")
+        if core >= config.core_count:
+            raise ValueError("sink core exceeds mesh")
+        count = _number(count, "sink occupancy")
+        if count > config.sink_buffer_depth:
+            raise ValueError("sink occupancy exceeds buffer capacity")
+        sink[core] = count
+    return sink
+
+
+def _bound(config, demand, sink):
+    values = [float(demand.latency)]
+    values.extend(demand.source.values())
+    values.extend(demand.destination.values())
+    values.extend(demand.links.values())
+    values.extend(config.sink_service_period * max(
+        0.0, count - (config.sink_buffer_depth - sink[dst]))
+        for dst, count in demand.destination.items())
+    result = max(values)
+    if not math.isfinite(result) or not math.isfinite(demand.endpoints):
+        raise ValueError("aggregate prediction demand exceeds finite numeric range")
+    return result
+
+
+def demand_cycles(
+    config: NoCConfig,
+    flows: Iterable[tuple[int, int, float]],
+    sink_occupancy: Mapping[int, float] | Sequence[float] | None = None,
+) -> float:
+    """Uncalibrated cycle proxy L for new (source, destination, flit-count) flows.
+
+    Fractional calibration means stay fractional. Self traffic is local and
+    contributes zero. L is neither a worst-case bound nor actual Rx latency.
     """
+    if not isinstance(config, NoCConfig):
+        raise ValueError("config must be NoCConfig")
+    demand = _Demand()
+    for src, dst, count in flows:
+        src, dst = _integer(src, "source core"), _integer(dst, "destination core")
+        if max(src, dst) >= config.core_count:
+            raise ValueError("flow endpoint exceeds mesh")
+        count = _number(count, "flow count")
+        if src != dst:
+            _add_flow(demand, src, dst, count, _path(config, src, dst))
+    return _bound(config, demand, _sink_vector(config, sink_occupancy))
 
-    USE_STAGE1 = True
-    USE_STAGE2 = True
-    USE_STAGE3 = True
 
-    def __init__(
-        self,
-        cards: List["Card"],
-        load_weight: float = 1.0,
-        backlog_weight: float = 0.5,
-        load_ema_alpha: float = 0.2,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            cards=cards,
-            load_weight=load_weight,
-            backlog_weight=backlog_weight,
-            load_ema_alpha=load_ema_alpha,
-            **kwargs,
+class _ProjectionCache:
+    """Shared by a card's baseline and all delay candidates in one decision."""
+
+    def __init__(self, config):
+        self.config = config
+        self.paths = {}
+        self.steps = {}
+
+    def project(self, task, step):
+        key = (id(task.profile), task.mapping)
+        if key not in self.paths:
+            self.paths[key] = tuple(
+                (task.mapping[int(src)], task.mapping[int(dst)],
+                 _path(self.config, task.mapping[int(src)], task.mapping[int(dst)]))
+                for src, dst in zip(task.profile.edge_src, task.profile.edge_dst))
+        step_key = (*key, step)
+        if step_key not in self.steps:
+            demand = _Demand()
+            for (src, dst, path), count in zip(
+                    self.paths[key], task.profile.expected_edge_flits[step]):
+                if src != dst:
+                    _add_flow(demand, src, dst, float(count), path)
+            self.steps[step_key] = demand
+        return self.steps[step_key]
+
+
+def _inventory(config, outstanding):
+    demand, sink = _Demand(), [0.0] * config.core_count
+    for row in outstanding:
+        kind = row["kind"]
+        count = _number(row["count"], "inventory count")
+        src, dst = (_integer(row[name], name) for name in ("src_core", "dst_core"))
+        router = _integer(row["router"], "router")
+        if max(src, dst, router) >= config.core_count:
+            raise ValueError("inventory core exceeds mesh")
+        if kind == "sink_ni":
+            sink[dst] += count
+        elif kind in ("source_pending", "source_ni"):
+            _add_flow(demand, src, dst, count, _path(config, src, dst))
+        elif kind == "router":
+            _add_flow(demand, router, dst, count,
+                      _path(config, router, dst), source=False)
+        else:
+            raise ValueError(f"unknown outstanding inventory kind {kind!r}")
+    return demand, _sink_vector(config, sink)
+
+
+def residual_demand_cycles(config: NoCConfig, outstanding: Iterable[dict]) -> float:
+    """Uncalibrated L for observed inventory, routing from each current location.
+
+    Router inventory only needs remaining hops plus Rx. Source inventory also
+    needs injection; sink inventory is already delivered and only uses space.
+    """
+    if not isinstance(config, NoCConfig):
+        raise ValueError("config must be NoCConfig")
+    demand, sink = _inventory(config, outstanding)
+    return _bound(config, demand, sink)
+
+
+def _duration(state, demand, sink, tick, config):
+    """Finite aggregate sink approximation, without clipping overflow to B.
+
+    Service opportunities use the global P-period phase. The model aggregates
+    all arrivals across the round and can therefore credit a service slot
+    before the corresponding packet would actually arrive. Fractional means,
+    queue-empty gaps and FIFO ordering are not modeled packet by packet;
+    independent validation must quantify this approximation's errors.
+    """
+    noc = state.network_config
+    length = config.gamma * _bound(noc, demand, sink)
+    if not math.isfinite(length):
+        raise ValueError("calibrated prediction duration exceeds finite numeric range")
+    cycles = math.ceil(length)
+    begin_cycle = (tick - 1) * state.cycles_per_tick
+    period = noc.sink_service_period
+    # A closed-form capacity correction replaces an unbounded length loop.
+    # Account for the current global service phase; never clamp overflow to B.
+    required_slots = max((math.ceil(max(0.0,
+        sink[dst] + count - noc.sink_buffer_depth))
+        for dst, count in demand.destination.items()), default=0)
+    if required_slots:
+        cycles = max(cycles, (begin_cycle // period + required_slots) * period - begin_cycle)
+    ticks = max(1, (cycles + state.cycles_per_tick - 1) // state.cycles_per_tick)
+    end_cycle = begin_cycle + ticks * state.cycles_per_tick
+    slots = end_cycle // period - begin_cycle // period
+    following = [max(0.0, old + demand.destination.get(core, 0.0) - slots)
+                 for core, old in enumerate(sink)]
+    if any(value > noc.sink_buffer_depth + 1e-9 for value in following):
+        raise ValueError("fluid receive inventory exceeds capacity after duration correction")
+    return ticks, following
+
+
+@dataclass
+class _Tail:
+    completions: dict[str, int] = field(default_factory=dict)
+    starts: dict[str, int] = field(default_factory=dict)
+    rounds: list[tuple[int, int]] = field(default_factory=list)
+    peak_comp: float = 0.0
+    peak_noc: float = 0.0
+    residual_ticks: int = 0
+
+
+def _predict(state, config, cache, residual, initial_sink, new_task=None):
+    tasks = state.tasks + (() if new_task is None else (new_task,))
+    steps = {task.task_id: task.next_step for task in tasks}
+    running = {task.task_id for task in tasks if task.running}
+    todo = {task.task_id: task for task in tasks}
+    sink, tick = list(initial_sink), state.current_tick
+    tail = _Tail(peak_noc=residual.endpoints)
+    if state.round_open:
+        length, sink = _duration(state, residual, sink, tick, config)
+        tail.residual_ticks = length
+        tail.rounds.append((tick, tick + length - 1))
+        tick += length
+        for task_id in tuple(running):
+            if steps[task_id] == todo[task_id].profile.T:
+                tail.completions[task_id] = tick - 1
+                del todo[task_id]
+                running.remove(task_id)
+    while todo:
+        if len(tail.rounds) >= config.max_rounds:
+            raise ValueError("STPS forecast exceeds max_rounds; increase the explicit guard")
+        active = [task for task in todo.values()
+                  if task.task_id in running or task.requested_start_tick <= tick]
+        if not active:
+            following = min(task.requested_start_tick for task in todo.values())
+            period, k = state.network_config.sink_service_period, state.cycles_per_tick
+            slots = ((following - 1) * k) // period - ((tick - 1) * k) // period
+            sink = [max(0.0, count - slots) for count in sink]
+            tick = following
+            continue
+        demand, compute = _Demand(), 0.0
+        for task in active:
+            if task.task_id not in running:
+                running.add(task.task_id)
+                tail.starts[task.task_id] = tick
+            step = steps[task.task_id]
+            demand.add(cache.project(task, step))
+            compute += float(task.profile.compute_total_sops[step])
+        if not math.isfinite(compute):
+            raise ValueError("aggregate compute prediction exceeds finite numeric range")
+        tail.peak_comp = max(tail.peak_comp, compute)
+        tail.peak_noc = max(tail.peak_noc, demand.endpoints)
+        length, sink = _duration(state, demand, sink, tick, config)
+        tail.rounds.append((tick, tick + length - 1))
+        tick += length
+        for task in active:
+            steps[task.task_id] += 1
+            if steps[task.task_id] == task.profile.T:
+                tail.completions[task.task_id] = tick - 1
+                del todo[task.task_id]
+                running.remove(task.task_id)
+    return tail
+
+
+def _delays(state, baseline, d_max):
+    """Monotone merge of equal predicted join boundaries in O(D + rounds)."""
+    result = []
+    cursor, previous = 0, None
+    for delay in range(d_max + 1):
+        requested = state.current_tick + delay
+        while cursor < len(baseline.rounds) and baseline.rounds[cursor][1] < requested:
+            cursor += 1
+        join = requested
+        if cursor < len(baseline.rounds):
+            start, end = baseline.rounds[cursor]
+            if start < requested <= end or (cursor == 0 and state.round_open and requested == start):
+                join = end + 1
+        if join != previous:
+            result.append((delay, join))
+        previous = join
+    return result
+
+
+def _projected_cvs(values, increment):
+    """Population CV after adding ``increment`` to each index in turn.
+
+    Scaling avoids overflow, and shared first/second moments make all card
+    projections O(M), rather than rescanning M cards for every candidate.
+    """
+    scale = max(max(values), increment)
+    if scale == 0:
+        return [0.0] * len(values)
+    scaled = [value / scale for value in values]
+    delta = increment / scale
+    total = math.fsum(scaled)
+    total_sq = math.fsum(value * value for value in scaled)
+    result = []
+    for value in scaled:
+        projected_total = total + delta
+        mean = projected_total / len(scaled)
+        projected_sq = total_sq + 2 * value * delta + delta * delta
+        variance = max(0.0, projected_sq / len(scaled) - mean * mean)
+        cv = math.sqrt(variance) / mean
+        if not math.isfinite(cv):
+            raise ValueError("projected cluster balance exceeds finite numeric range")
+        result.append(cv)
+    return result
+
+
+def _balance_by_card(cards, profile, config):
+    """Projected full-window allocation balance for each possible card.
+
+    The state counters are cumulative assignments, including completed tasks.
+    A candidate adds the new task's complete offline-profile totals. Delays do
+    not change those totals, so all offsets on one card share this projection.
+    """
+    new_compute = _number(profile.total_compute_sops,
+                          "profile total_compute_sops")
+    new_noc = _number(profile.total_noc_endpoint,
+                      "profile total_noc_endpoint")
+    base_compute = [state.cumulative_assigned_compute_sops for state in cards]
+    base_noc = [state.cumulative_assigned_noc_endpoint for state in cards]
+    compute_cvs = _projected_cvs(base_compute, new_compute)
+    noc_cvs = _projected_cvs(base_noc, new_noc)
+    projections = {}
+    for index, state in enumerate(cards):
+        compute_cv = compute_cvs[index]
+        noc_cv = noc_cvs[index]
+        weighted_compute = config.compute_weight * compute_cv
+        weighted_noc = config.noc_weight * noc_cv
+        projections[state.card_id] = (
+            compute_cv, noc_cv, max(weighted_compute, weighted_noc),
+            weighted_compute + weighted_noc,
         )
-
-    @property
-    def name(self) -> str:
-        return "stps-la"
+    return projections
 
 
-register_scheduler("stps", STPSScheduler)
-register_scheduler("stps-spatial", STPSSpatialScheduler)
-register_scheduler("stps-temporal", STPSTemporalScheduler)
-register_scheduler("stps-la", STPSLoadAwareScheduler)
+def choose_stps(
+    states: Sequence[CardForecastState], task_id: str,
+    profile: SchedulingFingerprint, config: STPSConfig = STPSConfig(),
+) -> STPSDecision | None:
+    """Evaluate every eligible card and distinct predicted offset together.
+
+    ``completion`` ranks lexicographically by completion/externality cost, dual
+    demand pressure, requested delay and card ID. ``balance`` first admits only
+    candidates whose J is at most ``min_J * (1 + balance_slack)``, then
+    minimizes projected cumulative compute/NoC CV. The caller owns resource
+    feasibility and atomically commits the returned fixed mapping and delay.
+    No mutation of snapshots, profiles, NoC state or reservations occurs here.
+    """
+    if not isinstance(config, STPSConfig):
+        raise ValueError("config must be STPSConfig")
+    if not isinstance(profile, SchedulingFingerprint):
+        raise ValueError("profile must be a SchedulingFingerprint")
+    if not isinstance(task_id, str) or not task_id:
+        raise ValueError("task_id must be nonempty")
+    cards = sorted(states, key=lambda state: state.card_id)
+    if len({state.card_id for state in cards}) != len(cards):
+        raise ValueError("candidate card IDs must be unique")
+    if len({state.current_tick for state in cards}) > 1:
+        raise ValueError("all candidates must share one current physical Tick")
+    if any(task.task_id == task_id for state in cards for task in state.tasks):
+        raise ValueError("new task_id is already present in a forecast")
+    balance_by_card = _balance_by_card(cards, profile, config) if cards else {}
+    candidates = []
+    for state in cards:
+        if not state.candidate_feasible:
+            continue
+        mapping = _mapping(state.mapping, profile, state.network_config)
+        cache = _ProjectionCache(state.network_config)
+        residual, sink = _inventory(state.network_config, state.outstanding)
+        if not state.round_open and residual.endpoints:
+            raise ValueError("undelivered inventory requires an open card round")
+        baseline = _predict(state, config, cache, residual, sink)
+        for delay, expected_join in _delays(state, baseline, config.d_max):
+            new_task = ForecastTask(task_id, profile, mapping, 0,
+                                    state.current_tick + delay, False)
+            forecast = _predict(state, config, cache, residual, sink, new_task)
+            if forecast.starts[task_id] != expected_join:
+                raise AssertionError("joining a candidate changed a preceding forecast round")
+            externality = sum(max(0, forecast.completions[old] - finish)
+                              for old, finish in baseline.completions.items())
+            completion_cost = forecast.completions[task_id] - state.current_tick + 1
+            pressure = max(forecast.peak_comp / state.compute_budget_sops,
+                           forecast.peak_noc / state.noc_budget_endpoint)
+            if not math.isfinite(pressure):
+                raise ValueError("normalized prediction pressure exceeds finite numeric range")
+            compute_cv, noc_cv, balance_primary, balance_secondary = (
+                balance_by_card[state.card_id])
+            candidates.append({
+                "card_id": state.card_id, "delay": delay, "mapping": list(mapping),
+                "predicted_actual_start": forecast.starts[task_id],
+                "predicted_completion": forecast.completions[task_id],
+                "J": completion_cost + externality, "completion_cost": completion_cost,
+                "externality_ticks": externality, "peak_comp": forecast.peak_comp,
+                "peak_noc": forecast.peak_noc, "pressure": pressure,
+                "projected_compute_cv": compute_cv,
+                "projected_noc_cv": noc_cv,
+                "balance_primary": balance_primary,
+                "balance_secondary": balance_secondary,
+                "predicted_rounds": len(forecast.rounds),
+                "predicted_residual_ticks": forecast.residual_ticks,
+                "predicted_existing_completions": {
+                    old: forecast.completions[old] for old in baseline.completions},
+                "baseline_existing_completions": dict(baseline.completions),
+            })
+    if not candidates:
+        return None
+    if config.objective == "completion":
+        best = min(candidates, key=lambda row: (
+            row["J"], row["pressure"], row["delay"], row["card_id"]))
+    else:
+        min_j = min(row["J"] for row in candidates)
+        admissible_j = min_j * (1 + config.balance_slack) + 1e-12
+        for row in candidates:
+            row["balance_admissible"] = row["J"] <= admissible_j
+            row["balance_j_limit"] = admissible_j
+        best = min((row for row in candidates if row["balance_admissible"]),
+                   key=lambda row: (row["balance_primary"],
+                                    row["balance_secondary"], row["J"],
+                                    row["pressure"], row["delay"],
+                                    row["card_id"]))
+    return STPSDecision(
+        card_id=best["card_id"], delay=best["delay"],
+        mapping=tuple(best["mapping"]),
+        predicted_actual_start=best["predicted_actual_start"],
+        predicted_completion=best["predicted_completion"], J=best["J"],
+        peak_comp=best["peak_comp"], peak_noc=best["peak_noc"],
+        pressure=best["pressure"],
+        projected_compute_cv=best["projected_compute_cv"],
+        projected_noc_cv=best["projected_noc_cv"],
+        balance_primary=best["balance_primary"],
+        balance_secondary=best["balance_secondary"],
+        candidate_count=len(candidates), candidates=tuple(candidates),
+    )

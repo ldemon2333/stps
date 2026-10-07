@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "name": "cluster-poisson-4x4x4",
+  "cluster": {
+    "cards": 4,
+    "mesh_x": 4,
+    "mesh_y": 4,
+    "neurons_per_core": 64,
+    "memory_mb": 8,
+    "compute_budget_sops": 500,
+    "noc_budget_endpoint": 40
+  },
+  "noc": {
+    "cycles_per_tick": 8,
+    "router_buffer_depth": 2,
+    "source_buffer_depth": 2,
+    "sink_buffer_depth": 2,
+    "sink_service_period": 1
+  },
+  "max_ticks": 400,
+  "steady_window": [
+    5,
+    40
+  ],
+  "scheduler_seed": 17,
+  "tasks": [
+    {
+      "task_id": "task-01",
+      "arrival_tick": 1,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-02",
+      "arrival_tick": 1,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-03",
+      "arrival_tick": 1,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-04",
+      "arrival_tick": 2,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    },
+    {
+      "task_id": "task-05",
+      "arrival_tick": 3,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-06",
+      "arrival_tick": 8,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-07",
+      "arrival_tick": 8,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-08",
+      "arrival_tick": 9,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    },
+    {
+      "task_id": "task-09",
+      "arrival_tick": 9,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-10",
+      "arrival_tick": 9,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-11",
+      "arrival_tick": 10,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-12",
+      "arrival_tick": 10,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    },
+    {
+      "task_id": "task-13",
+      "arrival_tick": 10,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-14",
+      "arrival_tick": 10,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-15",
+      "arrival_tick": 10,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-16",
+      "arrival_tick": 12,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    },
+    {
+      "task_id": "task-17",
+      "arrival_tick": 15,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-18",
+      "arrival_tick": 15,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-19",
+      "arrival_tick": 16,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-20",
+      "arrival_tick": 17,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    },
+    {
+      "task_id": "task-21",
+      "arrival_tick": 17,
+      "workload": "workloads/light_sparse.json",
+      "mean_compute_sops": 135.0,
+      "mean_noc_endpoint": 6.25
+    },
+    {
+      "task_id": "task-22",
+      "arrival_tick": 19,
+      "workload": "workloads/compute_heavy.json",
+      "mean_compute_sops": 375.0,
+      "mean_noc_endpoint": 2.0
+    },
+    {
+      "task_id": "task-23",
+      "arrival_tick": 20,
+      "workload": "workloads/fan_in.json",
+      "mean_compute_sops": 200.0,
+      "mean_noc_endpoint": 14.0
+    },
+    {
+      "task_id": "task-24",
+      "arrival_tick": 23,
+      "workload": "workloads/wide_burst.json",
+      "mean_compute_sops": 225.0,
+      "mean_noc_endpoint": 18.5
+    }
+  ],
+  "metadata": {
+    "provenance": "synthetic manually specified sparse workload traces; not real SNN or hardware data",
+    "arrival_mode": "poisson",
+    "arrival_seed": 23,
+    "arrival_parameters": {
+      "poisson_rate": 1.2
+    },
+    "arrival_generation": "simulation.arrivals.make_arrival_ticks; fixed task count 24",
+    "mean_compute_sops_definition": "sum of independent calibration SOP trace divided by logical steps T",
+    "mean_noc_endpoint_definition": "2 times calibration non-self expected flits divided by logical steps T; one Tx and one Rx endpoint per cross-core flit",
+    "mean_profile_source": "declared known synthetic profile; policies receive these means, not replay future step values",
+    "task_identity": "same 24 IDs, order, workload files and mean profiles across arrival modes; arrival_tick alone differs",
+    "mapping": "all policies use row-major smallest available core IDs, one MicroPopulation per physical core",
+    "window_definition": "predeclared physical Tick interval; never selected from simulation results"
+  }
+}

@@ -1,4 +1,4 @@
-"""Synaptic connectivity mask M_ij (docs/fingerprint.md §4).
+"""Synaptic connectivity mask M_ij for explicit offline graph edges.
 
 M_ij is the per-spike physical multicast factor on edge i→j: how many
 flits a single source spike from v_i incurs at v_j. Three closed-form

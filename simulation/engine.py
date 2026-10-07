@@ -1,558 +1,242 @@
-"""Unified simulation engine supporting pluggable schedulers.
-
-This module provides the main simulation loop for SNN cluster experiments.
-It supports any scheduler that implements the BaseScheduler interface.
-"""
+"""Single-card replay: fixed physical ticks, elastic logical steps and a card barrier."""
 from __future__ import annotations
 
-import logging
-import random
-from collections import deque
-from datetime import datetime
+from dataclasses import asdict, dataclass
+import json
 from pathlib import Path
-from typing import Dict, List, Optional
-import numpy as np
+import time
 
-from schedule.base import BaseScheduler, get_scheduler
-from util.card import Card
+from simulation.noc import NoCNetwork
+from simulation.scenario import Scenario, TaskPlacement, load_scenario
 from util.metrics import MetricsWriter, SimulationMetrics
-from util.sim import build_arrival_plan, create_task, setup_logging
-from util.task import Task
-from fingerprint import Fingerprint
-
-logger = logging.getLogger(__name__)
 
 
-class SimulationEngine:
-    def __init__(
-        self,
-        scheduler_name: str,
-        card_count: int = 4,
-        task_count: int = 100,
-        steps: int = 60,
-        seed: Optional[int] = None,
-        log_dir: str = "log",
-        data_dir: str = "data",
-        arrival_mode: str = "poisson",
-        data_output: Optional[str] = None,
-        fingerprint_dir: Optional[str] = None,
-        bw_max: float = 1e9,
-        bw_cap: Optional[float] = None,
-        d_max: int = 16,
-        horizon: int = 64,
-        centrality_split_threshold: float = 0.2,
-        queue_depth_factor: float = 8.0,
-        wandb: bool = False,
-        wandb_project: str = "stps-simulation",
-        wandb_run_name: Optional[str] = None,
-        wandb_entity: Optional[str] = None,
-        wandb_mode: Optional[str] = None,
-        **scheduler_kwargs,
-    ):
-        self.scheduler_name = scheduler_name
-        self.card_count = card_count
-        self.task_count = task_count
-        self.steps = steps
-        self.seed = seed
-        self.log_dir = log_dir
-        self.data_dir = data_dir
-        self.arrival_mode = arrival_mode
-        self.data_output = data_output
-        self.fingerprint_dir = fingerprint_dir
-        self.bw_max = bw_max
-        self.bw_cap = bw_cap
-        self.d_max = d_max
-        self.horizon = horizon
-        self.centrality_split_threshold = centrality_split_threshold
-        self.queue_depth_factor = queue_depth_factor
-        self.wandb = wandb
-        self.wandb_project = wandb_project
-        self.wandb_run_name = wandb_run_name
-        self.wandb_entity = wandb_entity
-        self.wandb_mode = wandb_mode
-        self.scheduler_kwargs = scheduler_kwargs
-        self._fingerprint_paths: List[str] = []
+@dataclass(frozen=True)
+class SimulationResult:
+    status: str
+    output_dir: Path
+    ticks_executed: int
+    summary: dict
 
-        self.cards: List[Card] = []
-        self.active_tasks: List[Task] = []
-        self.pending_tasks: List[Task] = []
-        self.scheduler: Optional[BaseScheduler] = None
-        self.metrics: Optional[SimulationMetrics] = None
-        self.metrics_writer: Optional[MetricsWriter] = None
-        self.wandb_run = None
-        self._card_epoch_load: Dict[int, float] = {}
-        self._card_epoch_demand: Dict[int, float] = {}
-        self._card_epoch_backlog: Dict[int, float] = {}
-        self._max_backlog_ticks: int = 0
 
-    def _init_wandb(self):
-        if not self.wandb:
-            return None
-        try:
-            import wandb
-        except ImportError as exc:
-            raise RuntimeError(
-                "wandb logging requested but wandb is not installed in this Python environment"
-            ) from exc
+def _verify_conservation(metrics, outstanding):
+    """No drops or duplicates, including delivered flits retained by the sink NI."""
+    inventory = {task_id: {"source": 0, "network": 0, "sink": 0} for task_id in metrics.tasks}
+    for row in outstanding:
+        kind = ("source" if row["kind"] in ("source_pending", "source_ni") else
+                "sink" if row["kind"] == "sink_ni" else "network")
+        inventory[row["task_id"]][kind] += row["count"]
+    for task_id, counts in metrics.totals.items():
+        stock = inventory[task_id]
+        if not (counts["generated_tx"] == counts["tx_injected"] + stock["source"]
+                and counts["tx_injected"] == counts["rx_ejected"] + stock["network"]
+                and counts["rx_ejected"] == counts["rx_consumed"] + stock["sink"]):
+            raise AssertionError(f"flit conservation failed for {task_id}: {counts}, {stock}")
+    return inventory
 
-        config = {
-            "scheduler": self.scheduler_name,
-            "cards": self.card_count,
-            "tasks": self.task_count,
-            "steps": self.steps,
-            "seed": self.seed,
-            "arrival_mode": self.arrival_mode,
-            "fingerprint_dir": self.fingerprint_dir,
-            "bw_max": self.bw_max,
-            "d_max": self.d_max,
-            "horizon": self.horizon,
-            "centrality_split_threshold": self.centrality_split_threshold,
-        }
-        init_kwargs = {
-            "project": self.wandb_project,
-            "name": self.wandb_run_name,
-            "entity": self.wandb_entity,
-            "mode": self.wandb_mode,
-            "config": config,
-        }
-        init_kwargs = {k: v for k, v in init_kwargs.items() if v is not None}
-        return wandb.init(**init_kwargs)
 
-    def _log_wandb_snapshot(self, snapshot, arrivals: int) -> None:
-        if self.wandb_run is None:
-            return
+@dataclass
+class _Progress:
+    placement: TaskPlacement
+    actual_start_tick: int | None = None
+    completion_tick: int | None = None
+    steps_started: int = 0
+    steps_completed: int = 0
+    communication_extension_ticks: int = 0
+    step_start_tick: int | None = None
+    last_rx_cycle: int | None = None
 
-        payload = {
-            "arrival/tasks": arrivals,
-            "cluster/total_load": float(sum(snapshot.card_loads.values())),
-            "cluster/mean_load": float(snapshot.mean_load),
-            "cluster/cv": float(snapshot.cv),
-            "cluster/jfi": float(snapshot.jfi),
-            "cluster/active_tasks": len(self.active_tasks),
-            "cluster/pending_tasks": len(self.pending_tasks),
-        }
-        for card_id in sorted(snapshot.card_loads):
-            payload[f"card/{card_id}_load"] = float(snapshot.card_loads[card_id])
-            payload[f"card/{card_id}_tasks"] = int(snapshot.card_task_counts[card_id])
+    @property
+    def running(self):
+        return self.actual_start_tick is not None and self.completion_tick is None
 
-        self.wandb_run.log(payload, step=snapshot.time_step)
+    @property
+    def logical_tick(self):
+        return self.steps_started - 1
 
-    def _finish_wandb(self) -> None:
-        if self.wandb_run is not None:
-            self.wandb_run.finish()
-            self.wandb_run = None
-
-    def _initialize_scheduler(self, scheduler_class: type) -> BaseScheduler:
-        scheduler_kwargs = {
-            "cards": self.cards,
-            **self.scheduler_kwargs,
+    def summary(self, tick):
+        requested = self.placement.start_tick
+        started, completed = self.actual_start_tick, self.completion_tick
+        observed = (completed or tick) - started + 1 if started is not None else 0
+        execution = observed if completed is not None else None
+        return {
+            "status": "completed" if completed is not None else "unfinished" if started is not None else "not_started",
+            "actual_start_tick": started, "completion_tick": completed,
+            "steps_started": self.steps_started, "steps_completed": self.steps_completed,
+            "task_start_wait_ticks": started - requested if started is not None else max(0, tick - requested + 1),
+            "observed_execution_ticks": observed, "task_execution_ticks": execution,
+            "task_end_to_end_ticks": completed - requested + 1 if completed is not None else None,
+            "communication_extension_ticks": self.communication_extension_ticks,
+            "slowdown": execution / self.placement.workload.T if execution is not None else None,
         }
 
-        if self._uses_phase_shift():
-            scheduler_kwargs.update(
-                horizon=self.horizon,
-                d_max=self.d_max,
-                bw_max=self.bw_max,
-                centrality_split_threshold=self.centrality_split_threshold,
-            )
 
-        return scheduler_class(**scheduler_kwargs)
+def run_simulation(scenario: Scenario | str | Path, output_dir: str | Path,
+                   *, trace: bool = False, report: bool = True) -> SimulationResult:
+    """Keep queues across K-cycle windows; issue new work only after the card barrier.
 
-    def _is_stps(self) -> bool:
-        return self.scheduler_name.lower().startswith("stps")
+    Waiting tasks are admitted at round boundaries in (requested start, task ID)
+    order when their fixed mapped cores and memory are free. A completed Rx is
+    delivery; sink consumption can continue later with its original identity.
+    """
+    if not isinstance(scenario, Scenario):
+        scenario = load_scenario(scenario)
+    writer = MetricsWriter(output_dir, trace)
+    metrics = SimulationMetrics(scenario.tasks, writer, scenario.network.mesh_x)
+    network = NoCNetwork(scenario.network)
+    started, cpu_started = time.perf_counter(), time.process_time()
+    progress = {task.task_id: _Progress(task) for task in scenario.tasks}
+    round_start = None
+    status, tick = "max_ticks", 0
+    last_outstanding = []
+    blocked_ticks = extension_ticks = rounds_started = rounds_completed = 0
 
-    def _uses_phase_shift(self) -> bool:
-        name = self.scheduler_name.lower()
-        return name.startswith("stps") or name.endswith("-phase")
+    def write_step(p, end_tick, completed, rx_complete):
+        duration = end_tick - p.step_start_tick + 1
+        writer.write("step_timing", {
+            "task_id": p.placement.task_id, "logical_tick": p.logical_tick,
+            "step_start_tick": p.step_start_tick, "step_end_tick": end_tick,
+            "logical_step_duration_ticks": duration,
+            "communication_extension_ticks": duration - 1,
+            "last_rx_cycle": p.last_rx_cycle, "rx_complete": rx_complete,
+            "step_completed": completed,
+        })
 
-    def _load_fingerprint_dir(self) -> None:
-        """Index *.npz fingerprints; required because per-tick load is read from E^(t)."""
-        if not self.fingerprint_dir:
-            raise ValueError(
-                "fingerprint_dir is required: per-tick task load is sampled from Fingerprint.E. "
-                "Run `make fingerprints` to generate synthetic .npz files."
-            )
-        d = Path(self.fingerprint_dir)
-        if not d.is_dir():
-            raise FileNotFoundError(f"Fingerprint dir {d} not found")
-        self._fingerprint_paths = sorted(str(p) for p in d.glob("*.npz"))
-        if not self._fingerprint_paths:
-            raise FileNotFoundError(f"No *.npz fingerprints in {d}")
-        logger.info("Loaded %d fingerprints from %s", len(self._fingerprint_paths), d)
-
-    def _pick_fingerprint(self, task_id: int) -> tuple[str, Fingerprint]:
-        """Round-robin fingerprint selection from the indexed dir."""
-        from fingerprint import load_fingerprint
-        path = self._fingerprint_paths[task_id % len(self._fingerprint_paths)]
-        fp = load_fingerprint(path)
-        return path, fp
-
-    def run(self) -> SimulationMetrics:
-        setup_logging(self.log_dir)
-
-        scheduler_class = get_scheduler(self.scheduler_name)
-
-        logger.info(
-            "Starting %s simulation | cards=%d tasks=%d steps=%d seed=%s arrival=%s",
-            scheduler_class.__name__ if hasattr(scheduler_class, '__name__') else self.scheduler_name,
-            self.card_count,
-            self.task_count,
-            self.steps,
-            self.seed,
-            self.arrival_mode,
-        )
-
-        if self.seed is not None:
-            random.seed(self.seed)
-            np.random.seed(self.seed)
-
-        self.cards = [Card(card_id=i, bw_cap=self.bw_cap) for i in range(self.card_count)]
-        self._card_epoch_load = {card.card_id: 0.0 for card in self.cards}
-        self._card_epoch_demand = {card.card_id: 0.0 for card in self.cards}
-        self._card_epoch_backlog = {card.card_id: 0.0 for card in self.cards}
-        # Per-card NoC injection queue: FIFO of [task, residual_traffic].
-        self._card_queue = {card.card_id: deque() for card in self.cards}
-
-        self.scheduler = self._initialize_scheduler(scheduler_class)
-        # Hand the scheduler a read-only view of cluster epoch loads.
-        self.scheduler.cluster_epoch_loads = self._card_epoch_load
-        # Also expose the backlog view (used by stps-la, docs/Q0_result.md §5.2 改动 D).
-        if hasattr(self.scheduler, "cluster_epoch_backlog"):
-            self.scheduler.cluster_epoch_backlog = self._card_epoch_backlog
-
-        self.metrics = SimulationMetrics(
-            scheduler_name=self.scheduler.name,
-            arrival_mode=self.arrival_mode,
-            card_count=self.card_count,
-            task_count=self.task_count,
-            steps=self.steps,
-            seed=self.seed,
-        )
-        self.metrics.start_time = datetime.now()
-        self.metrics.bw_cap_value = self.bw_cap
-
-        self.metrics_writer = MetricsWriter(self.data_dir)
-        self.metrics_writer.start_csv(
-            self.scheduler.name,
-            suffix=self.arrival_mode,
-            output_prefix=self.data_output,
-        )
-
-        self.wandb_run = self._init_wandb()
-
-        arrival_plan = build_arrival_plan(self.arrival_mode, self.task_count, self.steps)
-        logger.info("Arrival plan (%s): %s", self.arrival_mode, arrival_plan)
-
-        self._load_fingerprint_dir()
-
-        # Set MAX_BACKLOG_TICKS = 2 * max(T_fingerprint) once fingerprints are known.
-        # We don't pre-load every fp; use 2 * steps as a generous cap for safety.
-        self._max_backlog_ticks = max(2 * self.steps, 256)
-
-        self.active_tasks = []
-        self.pending_tasks = []
-        next_task_id = 0
-
-        t = 1
-        while t <= self.steps or self.active_tasks or self.pending_tasks:
-            logger.info("Time step %d", t)
-            arrivals = 0
-
-            if t <= self.steps:
-                arrivals = arrival_plan[t - 1]
-                if arrivals:
-                    logger.info("Arrivals at step %d: %d", t, arrivals)
-                for _ in range(arrivals):
-                    fp_path, fp = self._pick_fingerprint(next_task_id)
-                    task = create_task(next_task_id, t, fp)
-                    task.fingerprint_path = fp_path
-                    self.pending_tasks.append(task)
-                    self.scheduler.on_task_arrival(task, t)
-                    next_task_id += 1
-
-            self._place_pending_tasks(t)
-
-            self._tick(t)
-            self.scheduler.step(t)
-
-            snapshot = self.metrics.record_load_snapshot(
-                t, self.cards, self._card_epoch_load,
-                epoch_demand=self._card_epoch_demand,
-                epoch_backlog=self._card_epoch_backlog,
-            )
-            self.metrics_writer.write_snapshot(snapshot)
-            self._log_wandb_snapshot(snapshot, arrivals)
-
-            for card in self.cards:
-                logger.info(
-                    "Card %d load=%.2f tasks=%d",
-                    card.card_id,
-                    snapshot.card_loads[card.card_id],
-                    snapshot.card_task_counts[card.card_id],
-                )
-
-            self._reset_epoch_loads()
-
-            self._handle_completions(t)
-
-            t += 1
-
-        self.metrics.end_time = datetime.now()
-        self.metrics.tasks_pending_at_end = len(self.pending_tasks)
-
-        csv_final_path = self.metrics_writer.close()
-        logger.info("Saved load trace to %s", csv_final_path)
-
-        self.metrics_writer.write_summary(self.metrics)
-
-        self.metrics_writer.write_summary_csv(
-            self.metrics,
-            output_prefix=self.data_output,
-        )
-
-        self._finish_wandb()
-
-        return self.metrics
-
-    def _tick(self, t: int) -> None:
-        """Per-tick NoC injection-queue service.
-
-        Each card has a bounded FIFO injection queue drained at <= bw_cap per
-        tick. Per card:
-          1. pull each task's new quantum (pending_traffic preferred, else next
-             trace quantum), gated on start_offset;
-          2. enqueue the quantum unless the queue is at depth (buf_depth =
-             queue_depth_factor * cap) -> backpressure: hold as pending, no drop;
-          3. serve the queue FIFO up to cap; a task fully drained for the tick
-             advances tick_index, a partially-served one keeps its residual and
-             counts a congestion-wait tick;
-          4. cap=None bypasses the queue and serves all demand (bit-equivalent
-             to the pre-queue no-cap path).
-        """
-        # New-arrival quantum per task this tick.
-        task_demand: Dict[int, float] = {}
-        queued_ids = {id(tk) for q in self._card_queue.values() for tk, _ in q}
-        for task in self.active_tasks:
-            if id(task) in queued_ids:
-                # Already has a residual quantum in the NoC queue; don't re-pull.
-                task.current_traffic = 0.0
-                continue
-            if task.start_offset > 0 and task.placement_step >= 0 \
-                    and t < task.placement_step + task.start_offset:
-                task.current_traffic = 0.0
-                continue
-            if task.pending_traffic > 0.0:
-                demand = task.pending_traffic
-            else:
-                demand = task.next_trace_quantum()
-            task_demand[id(task)] = demand
-
-        for card in self.cards:
-            if card.card_id not in self._card_epoch_demand:
-                self._card_epoch_demand[card.card_id] = 0.0
-                self._card_epoch_backlog[card.card_id] = 0.0
-            d_tick = sum(task_demand.get(id(tk), 0.0) for tk in card.tasks)
-            self._card_epoch_demand[card.card_id] += d_tick
-            cap = card.bw_cap
-
-            # No cap: serve everything, no queue (bit-equivalent to old path).
-            if cap is None:
-                self._card_epoch_load[card.card_id] += d_tick
-                for tk in card.tasks:
-                    if id(tk) not in task_demand:
-                        tk.current_traffic = 0.0
+    try:
+        for tick in range(1, scenario.max_ticks + 1):
+            metrics.begin_tick(tick)
+            begin = (tick - 1) * scenario.cycles_per_tick
+            if round_start is None:
+                occupied = {core for p in progress.values() if p.running for core in p.placement.mapping}
+                occupied_memory = sum(p.placement.workload.state_size_mb for p in progress.values() if p.running)
+                for task in scenario.tasks:
+                    p = progress[task.task_id]
+                    if p.actual_start_tick is not None or task.start_tick > tick:
                         continue
-                    tk.current_traffic = task_demand[id(tk)]
-                    tk.pending_traffic = 0.0
-                    tk.blocked_ticks = 0
-                    tk.advance_trace_tick()
-                self._card_epoch_backlog[card.card_id] = 0.0
-                continue
-
-            q = self._card_queue[card.card_id]
-            buf_depth = max(self.queue_depth_factor, 1.0) * float(cap)
-            queued = sum(res for _, res in q)
-            for tk in card.tasks:
-                tk.current_traffic = 0.0
-                d = task_demand.get(id(tk), 0.0)
-                if d <= 0.0:
-                    continue
-                # Always admit at least one task to a non-empty/empty queue so a
-                # quantum larger than buf_depth can't deadlock; otherwise apply
-                # backpressure once the buffer is full (hold upstream, no drop).
-                if q and queued + d > buf_depth:
-                    tk.pending_traffic = d
-                    tk.blocked_ticks += 1
-                    tk.congestion_wait_ticks += 1
-                    continue
-                q.append([tk, d])
-                queued += d
-                tk.pending_traffic = 0.0
-
-            # Drain FIFO up to cap this tick.
-            budget = float(cap)
-            served_total = 0.0
-            while q and budget > 1e-12:
-                head = q[0]
-                tk, res = head[0], head[1]
-                take = res if res <= budget else budget
-                tk.current_traffic += take
-                budget -= take
-                served_total += take
-                if res - take > 1e-12:
-                    head[1] = res - take
-                    break
-                q.popleft()
-                tk.blocked_ticks = 0
-                tk.advance_trace_tick()
-            self._card_epoch_load[card.card_id] += served_total
-            self._card_epoch_backlog[card.card_id] = sum(res for _, res in q)
-
-            # Congestion-wait + timeout circuit-breaker for still-queued tasks.
-            for entry in list(q):
-                tk = entry[0]
-                tk.congestion_wait_ticks += 1
-                tk.blocked_ticks += 1
-                if tk.blocked_ticks > self._max_backlog_ticks:
-                    self.metrics.congestion_timeouts += 1  # type: ignore[union-attr]
-                    q.remove(entry)
-                    tk.blocked_ticks = 0
-                    tk.advance_trace_tick()
-
-    def _record_load(self) -> None:
-        # Kept for API compatibility; _tick already populates epoch loads.
-        pass
-
-    def _reset_epoch_loads(self) -> None:
-        for card_id in self._card_epoch_load:
-            self._card_epoch_load[card_id] = 0.0
-            self._card_epoch_demand[card_id] = 0.0
-            self._card_epoch_backlog[card_id] = 0.0
-
-    def _place_pending_tasks(self, time_step: int) -> int:
-        assigned = 0
-        for task in self.pending_tasks[:]:
-            target = self.scheduler.select_card_for_task(task)  # type: ignore
-            if target is None:
-                if getattr(task, "rejected", False):
-                    if self.metrics is not None:
-                        self.metrics.record_rejection(getattr(task, "reject_reason", "rejected"))
-                    self.pending_tasks.remove(task)
-                    logger.info(
-                        "Task %s dropped from pending queue: %s",
-                        task.task_id,
-                        getattr(task, "reject_reason", "rejected"),
-                    )
-                continue
-            if not target.put(task):
-                continue
-            task.placement_step = time_step
-            if self.metrics is not None:
-                self.metrics.record_start_offset(task.start_offset)
-            self.active_tasks.append(task)
-            self.pending_tasks.remove(task)
-            assigned += 1
-
-        if assigned:
-            logger.info(
-                "Assigned %d pending tasks; remaining pending=%d",
-                assigned,
-                len(self.pending_tasks),
-            )
-        elif self.pending_tasks:
-            logger.info("Pending tasks awaiting capacity: %d", len(self.pending_tasks))
-
-        return assigned
-
-    def _handle_completions(self, time_step: int) -> int:
-        assert self.metrics is not None, "Metrics not initialized"
-
-        finished: List[Task] = []
-        for task in self.active_tasks:
-            if task.start_offset > 0 and task.placement_step >= 0 \
-                    and time_step < task.placement_step + task.start_offset:
-                continue
-            # docs/traffic_optim.md §A.2: if NoC backlog blocked this task's quantum
-            # from fully draining, hold its lifecycle counter — wait time gets paid in
-            # extra ticks rather than free progress.
-            if task.pending_traffic > 0.0:
-                continue
-            task.duration_steps -= 1
-            if task.duration_steps <= 0:
-                finished.append(task)
-
-        if finished:
-            for task in finished:
-                task.completion_step = time_step
-                self.metrics.record_task_delay(
-                    task_id=task.task_id,
-                    arrival_step=task.arrival_step,
-                    placement_step=task.placement_step,
-                    completion_step=task.completion_step,
-                    host_card_id=int(task.host_card_id),
-                    cold_start_ticks=int(task.start_offset),
-                )
-                self.metrics.congestion_wait_ticks.append(int(task.congestion_wait_ticks))
-                if 0 <= task.host_card_id < len(self.cards):
-                    host_card = self.cards[task.host_card_id]
-                    host_card.evict(task)
-                self.active_tasks.remove(task)
-                self.scheduler.on_task_completion(task, time_step)  # type: ignore
-                self.metrics.tasks_completed += 1  # type: ignore
-
-            logger.info(
-                "Tasks completed this step: %s",
-                [t.task_id for t in finished],
-            )
-
-        return len(finished)
-
-
-def run_simulation(
-    scheduler: str,
-    cards: int = 4,
-    tasks: int = 100,
-    steps: int = 60,
-    seed: Optional[int] = None,
-    log_dir: str = "log",
-    data_dir: str = "data",
-    arrival_mode: str = "poisson",
-    fingerprint_dir: Optional[str] = None,
-    bw_max: float = 1e9,
-    bw_cap: Optional[float] = None,
-    d_max: int = 16,
-    horizon: int = 64,
-    centrality_split_threshold: float = 0.2,
-    queue_depth_factor: float = 8.0,
-    wandb: bool = False,
-    wandb_project: str = "stps-simulation",
-    wandb_run_name: Optional[str] = None,
-    wandb_entity: Optional[str] = None,
-    wandb_mode: Optional[str] = None,
-    **kwargs,
-) -> SimulationMetrics:
-    """Convenience function to run a simulation."""
-    engine = SimulationEngine(
-        scheduler_name=scheduler,
-        card_count=cards,
-        task_count=tasks,
-        steps=steps,
-        seed=seed,
-        log_dir=log_dir,
-        data_dir=data_dir,
-        arrival_mode=arrival_mode,
-        fingerprint_dir=fingerprint_dir,
-        bw_max=bw_max,
-        bw_cap=bw_cap,
-        d_max=d_max,
-        horizon=horizon,
-        centrality_split_threshold=centrality_split_threshold,
-        queue_depth_factor=queue_depth_factor,
-        wandb=wandb,
-        wandb_project=wandb_project,
-        wandb_run_name=wandb_run_name,
-        wandb_entity=wandb_entity,
-        wandb_mode=wandb_mode,
-        **kwargs,
-    )
-    return engine.run()
+                    if occupied.intersection(task.mapping) or occupied_memory + task.workload.state_size_mb > scenario.memory_mb + 1e-9:
+                        continue
+                    p.actual_start_tick = tick
+                    occupied.update(task.mapping)
+                    occupied_memory += task.workload.state_size_mb
+                active = [p for p in progress.values() if p.running]
+                if active:
+                    round_start = tick
+                    rounds_started += 1
+                    for p in active:
+                        task = p.placement
+                        logical = p.steps_completed
+                        p.steps_started += 1
+                        p.step_start_tick, p.last_rx_cycle = tick, None
+                        metrics.record_step(task, logical)
+                        for edge, value in enumerate(task.workload.flits[logical]):
+                            count = int(value)
+                            if not count:
+                                continue
+                            src = task.mapping[int(task.workload.edge_src[edge])]
+                            dst = task.mapping[int(task.workload.edge_dst[edge])]
+                            writer.write("events", {"kind": "generate_local" if src == dst else "generate",
+                                "cycle": begin, "physical_tick": tick, "task_id": task.task_id,
+                                "logical_tick": logical, "edge_id": edge, "src_core": src,
+                                "dst_core": dst, "count": count, "generated_cycle": begin})
+                            if src != dst:
+                                network.offer(task.task_id, logical, edge, src, dst, count, begin)
+            active = [p for p in progress.values() if p.running]
+            if round_start is not None and tick > round_start:
+                extension_ticks += 1
+                for p in active:
+                    p.communication_extension_ticks += 1
+            for cycle in range(begin, begin + scenario.cycles_per_tick):
+                metrics.sample_queues(network.occupancy())
+                for event in network.advance_cycle(cycle):
+                    metrics.event(event)
+                    if event["kind"] == "rx":
+                        p = progress[event["task_id"]]
+                        if p.running and event["logical_tick"] == p.logical_tick:
+                            p.last_rx_cycle = event["cycle"]
+            metrics.sample_end_boundary(network.occupancy())
+            last_outstanding = network.outstanding()
+            inventory = _verify_conservation(metrics, last_outstanding)
+            barrier_ready = not network.pending_delivery()
+            blocked_ticks += int(not barrier_ready)
+            active_steps = {}
+            for p in active:
+                stock = inventory[p.placement.task_id]
+                own_pending = bool(stock["source"] + stock["network"])
+                active_steps[p.placement.task_id] = {
+                    "logical_tick": p.logical_tick,
+                    "step_started": p.step_start_tick == tick,
+                    "step_elapsed_ticks": tick - p.step_start_tick + 1,
+                    "waiting_for_communication": own_pending,
+                    "waiting_for_card_barrier": not barrier_ready and not own_pending,
+                }
+            if barrier_ready and round_start is not None:
+                rounds_completed += 1
+                for p in active:
+                    write_step(p, tick, True, True)
+                    p.steps_completed += 1
+                    if p.steps_completed == p.placement.workload.T:
+                        p.completion_tick = tick
+            completed = sum(p.completion_tick is not None for p in progress.values())
+            waiting = sum(p.actual_start_tick is None and p.placement.start_tick <= tick for p in progress.values())
+            metrics.end_tick(last_outstanding, active_steps, completed, barrier_ready, round_start, waiting)
+            if completed == len(progress):
+                status = "completed"
+                break
+            if barrier_ready:
+                round_start = None
+        if status != "completed" and round_start is not None:
+            for p in progress.values():
+                if p.running:
+                    stock = inventory[p.placement.task_id]
+                    write_step(p, tick, False, not (stock["source"] + stock["network"]))
+        states = {task_id: p.summary(tick) for task_id, p in progress.items()}
+        metrics.finish_tasks(states)
+        for entry in last_outstanding:
+            writer.write("outstanding", {**entry, "physical_tick": tick,
+                                          "delivery_pending": entry["kind"] != "sink_ni"})
+        totals = metrics.total()
+        summary = {
+            "schema_version": 2, "scenario": scenario.name, "status": status,
+            "valid": status == "completed", "ticks_executed": tick,
+            "cycles_executed": tick * scenario.cycles_per_tick,
+            "physical_tick_period_cycles": scenario.cycles_per_tick,
+            "time_model": "fixed physical tick; cross-tick queues; chip-wide Rx barrier before next logical step",
+            "admission_order": "requested start_tick, then task_id; fixed-core/memory feasible tasks at round boundaries",
+            "cycle_boundary_order": "cycle c transfers commit at c+1; Rx at ending boundary counts before barrier check",
+            "compute_model": "trace SOP work issued once per logical step; no compute service timing",
+            "quantization": "per-edge decimal carry, floor, cached per workload",
+            "sparse_output": "missing core_tick row means zero activity; task_tick includes silent/waiting active steps",
+            "trace_enabled": trace, "config": asdict(scenario.network), "max_ticks": scenario.max_ticks,
+            "neurons_per_core": scenario.neurons_per_core, "memory_mb": scenario.memory_mb,
+            "scenario_path": str(scenario.path), "scenario_sha256": scenario.sha256,
+            "elapsed_seconds": time.perf_counter() - started,
+            "cpu_seconds": time.process_time() - cpu_started,
+            "peak_inventory_flits": metrics.peak_inventory,
+            "units": {"compute_sops": "SOP", "traffic": "flit", "time": "NoC cycle"},
+            "totals": totals, "derived": metrics.derived(totals),
+            "timing": {"rounds_started": rounds_started, "rounds_completed": rounds_completed,
+                       "barrier_blocked_ticks": blocked_ticks, "communication_extension_ticks": extension_ticks,
+                       "tasks_completed": completed, "tasks_total": len(progress),
+                       "task_throughput_per_tick": completed / tick},
+            "tasks": [{"task_id": task.task_id, "start_tick": task.start_tick,
+                       "planned_end_tick": task.planned_end_tick,
+                       "population_count": task.workload.population_count,
+                       "mapping": list(task.mapping), "workload_path": str(task.workload_path),
+                       "workload_sha256": task.workload_hash, "source": task.workload.source,
+                       "metadata": task.workload.metadata, "logical_ticks": task.workload.T,
+                       "active_edges": int(sum((task.workload.flits > 0).any(axis=0))),
+                       "input_totals": task.workload.totals, **states[task.task_id]}
+                      for task in scenario.tasks],
+        }
+        writer.json("manifest.json", summary)
+        resolved = json.loads(scenario.path.read_text(encoding="utf-8"))
+        paths = {task.task_id: str(task.workload_path) for task in scenario.tasks}
+        for task in resolved["tasks"]:
+            task["workload"] = paths[task["task_id"]]
+        writer.json("scenario.json", resolved)
+    finally:
+        writer.close()
+    if report:
+        from simulation.report import write_report
+        write_report(writer.path)
+    return SimulationResult(status, writer.path, tick, summary)

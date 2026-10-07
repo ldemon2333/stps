@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "units": {
+    "traffic": "flits_per_logical_tick",
+    "compute": "sops_per_logical_tick"
+  },
+  "state_size_mb": 1.2,
+  "source": "synthetic:cluster-demo:compute_heavy",
+  "metadata": {
+    "calibration": "known synthetic profile; separate task-level means only",
+    "compute_model": "independent manually specified SOP trace",
+    "description": "high independent SOP work with sparse low communication",
+    "flit_model": "one abstract spike packet is one flit",
+    "provenance": "manually specified stimulus; not measured SNN inference"
+  },
+  "pop_size": [
+    64,
+    64,
+    64,
+    64
+  ],
+  "edge_src": [
+    0,
+    1,
+    2
+  ],
+  "edge_dst": [
+    3,
+    2,
+    2
+  ],
+  "edge_expected_flits": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      3.0
+    ],
+    [
+      2.0,
+      2.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      2.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "compute_sops": [
+    [
+      120.0,
+      100.0,
+      80.0,
+      100.0
+    ],
+    [
+      220.0,
+      200.0,
+      180.0,
+      200.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      60.0,
+      100.0,
+      120.0,
+      120.0
+    ],
+    [
+      240.0,
+      220.0,
+      140.0,
+      200.0
+    ],
+    [
+      100.0,
+      80.0,
+      60.0,
+      60.0
+    ],
+    [
+      80.0,
+      120.0,
+      40.0,
+      60.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

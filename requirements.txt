@@ -1,16 +1,3 @@
-# Core dependencies
-numpy
+numpy>=1.24
 
-# DRL dependencies (GLaSS-DRL)
-torch
-stable-baselines3
-gymnasium
-
-# SpikingResformer fingerprint adapter
-torchvision
-spikingjelly
-timm
-pillow
-
-# ImageNet-100 fetch (script/fetch_imagenet100_val.py)
-datasets
+# Optional model profiling uses torch in the existing SNN environment.

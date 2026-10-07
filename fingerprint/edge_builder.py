@@ -1,7 +1,7 @@
-"""DTDG edge builder (docs/fingerprint.md §3, §4, §Step 3, §Step 4).
+"""Explicit graph edge builder for the offline workload pipeline (docs/algo.md).
 
 Given:
-    - a list of LIF nodes, each already sliced into MicroPopulations (§2.3),
+    - a list of LIF nodes, each already sliced into MicroPopulations,
     - a topology spec describing edges (kind ∈ {linear, conv2d, identity}) and
       Sparsity Mask M_ij case,
     - per-LIF spike traces of shape (T, B, U) collected by forward hooks,
@@ -12,7 +12,7 @@ build the dynamic 2D edge tensor
 
 where channel 0 is Traffic^(t)_ij (NoC flits) and channel 1 is
 Compute^(t)_ij (downstream PIM SOPs). Both quantities are per-sample
-expectations (mean over B), per §Step 4.
+expectations (mean over B).
 
 Spike traces are ndarrays of shape (T, B, U_i) with U_i = sum of |v_i^(p)|
 over all shards of node i. We split U_i along the same axis the slicer used
@@ -40,8 +40,9 @@ class EdgeSpec:
         mask_factory: callable (src_pop, dst_pop) -> SparsityMask. Closure
             over kernel size / C_out etc., evaluated per shard pair.
         compute_per_flit: how many SOPs the destination triggers per arriving
-            flit (paper §3.3). Default 1 (one MAC per spike on PIM array).
-        delta: link delay in ticks (§3.2 δ_ij). Default 0.
+            flit under the caller's operator model. Default 1; not hardware timing.
+        delta: offline logical-step shift of demand, default 0. This is
+            not a NoC hop delay; the network computes physical delivery time.
     """
 
     src: str
@@ -54,7 +55,7 @@ class EdgeSpec:
 
 @dataclass
 class HaloEdgeSpec:
-    """Intra-node halo edge between two sibling shards (§2.3.2 case ii)."""
+    """Intra-node halo edge between two sibling shards."""
 
     src_global_idx: int
     dst_global_idx: int
